@@ -1,4 +1,5 @@
 import SwiftUI
+import OpenbirdKit
 
 struct TodayView: View {
     @ObservedObject var model: AppModel
@@ -34,17 +35,7 @@ struct TodayView: View {
                                 Text("Sections")
                                     .font(.headline)
                                 ForEach(journal.sections) { section in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("\(section.timeRange) • \(section.heading)")
-                                            .font(.headline)
-                                        ForEach(section.bullets, id: \.self) { bullet in
-                                            Text("• \(bullet)")
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .padding()
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
+                                    sectionCard(section)
                                 }
                             }
                         }
@@ -73,5 +64,36 @@ struct TodayView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func sectionCard(_ section: JournalSection) -> some View {
+        let event = representativeEvent(for: section)
+
+        return HStack(alignment: .top, spacing: 12) {
+            ActivityAppIcon(
+                bundleId: event?.bundleId,
+                appName: event?.appName ?? section.heading,
+                size: 30
+            )
+            .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(section.timeRange) • \(section.heading)")
+                    .font(.headline)
+                ForEach(section.bullets, id: \.self) { bullet in
+                    Text("• \(bullet)")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func representativeEvent(for section: JournalSection) -> ActivityEvent? {
+        let sourceEventIDs = Set(section.sourceEventIDs)
+        return model.rawEvents.first { sourceEventIDs.contains($0.id) }
     }
 }
