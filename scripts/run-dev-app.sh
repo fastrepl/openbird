@@ -19,18 +19,23 @@ MACOS_DIR="${CONTENTS_DIR}/MacOS"
 BUILD_DIR="$(cd "${ROOT_DIR}" && swift build --show-bin-path)"
 PLIST_TEMPLATE="${ROOT_DIR}/packaging/Openbird-Info.plist.template"
 ENTITLEMENTS="${ROOT_DIR}/packaging/Openbird.entitlements"
+SIGNING_IDENTITY="${OPENBIRD_SIGNING_IDENTITY:--}"
+PLIST_PATH="${CONTENTS_DIR}/Info.plist"
+TMP_PLIST="$(mktemp)"
 
-rm -rf "${APP_DIR}"
+trap 'rm -f "${TMP_PLIST}"' EXIT
+
 mkdir -p "${MACOS_DIR}"
 
-cp "${BUILD_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
-cp "${BUILD_DIR}/OpenbirdCollector" "${MACOS_DIR}/OpenbirdCollector"
-chmod +x "${MACOS_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdCollector"
+install -m 755 "${BUILD_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
+install -m 755 "${BUILD_DIR}/OpenbirdCollector" "${MACOS_DIR}/OpenbirdCollector"
 
 sed \
   -e "s/__BUNDLE_IDENTIFIER__/com.computelesscomputer.openbird.dev/g" \
   -e "s/__VERSION__/0.0.0/g" \
-  "${PLIST_TEMPLATE}" > "${CONTENTS_DIR}/Info.plist"
+  "${PLIST_TEMPLATE}" > "${TMP_PLIST}"
 
-codesign --force --deep --sign - --entitlements "${ENTITLEMENTS}" "${APP_DIR}"
+install -m 644 "${TMP_PLIST}" "${PLIST_PATH}"
+
+codesign --force --deep --sign "${SIGNING_IDENTITY}" --entitlements "${ENTITLEMENTS}" "${APP_DIR}"
 open "${APP_DIR}"
