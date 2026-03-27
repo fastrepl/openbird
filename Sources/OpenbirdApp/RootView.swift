@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @ObservedObject var model: AppModel
+    private let captureStatusTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationSplitView {
@@ -45,6 +46,12 @@ struct RootView: View {
         .sheet(isPresented: $model.isShowingRawLogInspector) {
             RawLogInspectorView(model: model)
         }
+        .onAppear {
+            Task { await model.refreshCollectorState() }
+        }
+        .onReceive(captureStatusTimer) { _ in
+            Task { await model.refreshCollectorState() }
+        }
         .alert("Openbird", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { newValue in
@@ -67,6 +74,8 @@ private struct CaptureStatusView: View {
 
     private var statusColor: Color {
         if model.settings.capturePaused { return .orange }
+        if model.isCollectorActiveElsewhere { return .secondary }
+        if model.isCollectorHeartbeatFresh == false { return .secondary }
         switch model.settings.collectorStatus {
         case "running":
             return .green
@@ -85,7 +94,7 @@ private struct CaptureStatusView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.captureStatusLabel)
                     .font(.headline)
-                Text(model.activeProvider?.name ?? "No active provider")
+                Text(model.captureStatusDetail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

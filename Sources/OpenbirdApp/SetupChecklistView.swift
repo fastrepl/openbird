@@ -47,6 +47,18 @@ struct SetupChecklistView: View {
                         }
                         .padding(.leading, 36)
                     }
+                    if model.accessibilityTrusted == false,
+                       model.isCollectorActiveElsewhere,
+                       let ownerPath = model.collectorOwnerPath {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Another Openbird instance currently owns capture. This window still needs its own Accessibility permission.")
+                                .foregroundStyle(.secondary)
+                            Text(ownerPath)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                        .padding(.leading, 36)
+                    }
                 }
                 permissionRow(
                     title: "BYOK provider",

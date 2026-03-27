@@ -2,18 +2,44 @@ import AppKit
 import Foundation
 
 public final class CollectorRuntime: NSObject, @unchecked Sendable {
+    public static let leaseTimeout: TimeInterval = 20
+
     private let store: OpenbirdStore
     private let snapshotter = AccessibilitySnapshotter()
     private let exclusionEngine = ExclusionEngine()
     private let captureInterval: TimeInterval
+    private let ownerID: String
+    private let ownerName: String
+    private let leaseTimeout: TimeInterval
     private var timer: Timer?
     private var currentEvent: ActivityEvent?
     private var currentFingerprint: String?
+    private var ownsLease = false
 
-    public init(store: OpenbirdStore, captureInterval: TimeInterval = 6) {
+    public init(
+        store: OpenbirdStore,
+        captureInterval: TimeInterval = 6,
+        ownerID: String = CollectorRuntime.defaultOwnerID(),
+        ownerName: String = CollectorRuntime.defaultOwnerName()
+    ) {
         self.store = store
         self.captureInterval = captureInterval
+        self.ownerID = ownerID
+        self.ownerName = ownerName
+        self.leaseTimeout = max(Self.leaseTimeout, captureInterval * 3)
         super.init()
+    }
+
+    public static func defaultOwnerID() -> String {
+        let executablePath = Bundle.main.executableURL?.path ?? ProcessInfo.processInfo.processName
+        return "\(ProcessInfo.processInfo.processIdentifier):\(executablePath)"
+    }
+
+    public static func defaultOwnerName() -> String {
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            return Bundle.main.bundleURL.path
+        }
+        return Bundle.main.executableURL?.path ?? ProcessInfo.processInfo.processName
     }
 
     public func start() {
@@ -35,7 +61,9 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         Task { [weak self] in
             guard let self else { return }
-            try? await updateCollectorStatus("stopped")
+            if ownsLease {
+                try? await store.releaseCollectorLease(ownerID: ownerID)
+            }
         }
     }
 
@@ -45,18 +73,31 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
 
     public func captureNow() async {
         do {
-            var settings = try await store.loadSettings()
+            let now = Date()
+            let claimedLease = try await store.claimCollectorLease(
+                ownerID: ownerID,
+                ownerName: ownerName,
+                now: now,
+                timeout: leaseTimeout
+            )
+            guard claimedLease else {
+                ownsLease = false
+                currentEvent = nil
+                currentFingerprint = nil
+                return
+            }
+            ownsLease = true
+
+            let settings = try await store.loadSettings()
             if settings.capturePaused {
                 currentEvent = nil
                 currentFingerprint = nil
-                settings.collectorStatus = "paused"
-                settings.lastCollectorHeartbeat = Date()
-                try await store.saveSettings(settings)
+                _ = try await store.updateCollectorStatus(ownerID: ownerID, status: "paused", heartbeat: now)
                 return
             }
 
             guard let snapshot = await MainActor.run(body: { snapshotter.snapshotFrontmostWindow() }) else {
-                try await updateCollectorStatus("idle")
+                _ = try await store.updateCollectorStatus(ownerID: ownerID, status: "idle", heartbeat: now)
                 return
             }
 
@@ -73,16 +114,11 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
                 currentFingerprint = snapshot.fingerprint
             }
 
-            try await updateCollectorStatus("running")
+            _ = try await store.updateCollectorStatus(ownerID: ownerID, status: "running", heartbeat: snapshot.capturedAt)
         } catch {
-            try? await updateCollectorStatus("error")
+            if ownsLease {
+                _ = try? await store.updateCollectorStatus(ownerID: ownerID, status: "error", heartbeat: Date())
+            }
         }
-    }
-
-    private func updateCollectorStatus(_ status: String) async throws {
-        var settings = try await store.loadSettings()
-        settings.collectorStatus = status
-        settings.lastCollectorHeartbeat = Date()
-        try await store.saveSettings(settings)
     }
 }

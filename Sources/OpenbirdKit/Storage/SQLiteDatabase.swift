@@ -127,6 +127,8 @@ public final class SQLiteDatabase: @unchecked Sendable {
             settings.lastCollectorHeartbeat = Date(timeIntervalSince1970: timestamp)
         }
         settings.collectorStatus = dict["collectorStatus"] ?? "stopped"
+        settings.collectorOwnerID = normalizeOptionalSetting(dict["collectorOwnerID"])
+        settings.collectorOwnerName = normalizeOptionalSetting(dict["collectorOwnerName"])
         return settings
     }
 
@@ -137,6 +139,8 @@ public final class SQLiteDatabase: @unchecked Sendable {
             ("activeProviderID", settings.activeProviderID ?? ""),
             ("lastCollectorHeartbeat", settings.lastCollectorHeartbeat.map { String($0.timeIntervalSince1970) } ?? ""),
             ("collectorStatus", settings.collectorStatus),
+            ("collectorOwnerID", settings.collectorOwnerID ?? ""),
+            ("collectorOwnerName", settings.collectorOwnerName ?? ""),
         ]
         try execute("DELETE FROM app_settings;")
         for (key, value) in values {
@@ -144,6 +148,53 @@ public final class SQLiteDatabase: @unchecked Sendable {
                 "INSERT INTO app_settings (key, value) VALUES (?, ?);",
                 bindings: [.text(key), .text(value)]
             )
+        }
+    }
+
+    public func claimCollectorLease(ownerID: String, ownerName: String, now: Date, timeout: TimeInterval) throws -> Bool {
+        try withImmediateTransaction {
+            var settings = try loadSettings()
+            let currentOwnerID = settings.collectorOwnerID
+            let heartbeatAge = settings.lastCollectorHeartbeat.map { now.timeIntervalSince($0) } ?? .infinity
+            let hasFreshOwner = currentOwnerID != nil && heartbeatAge <= timeout
+            if hasFreshOwner, currentOwnerID != ownerID {
+                return false
+            }
+            if currentOwnerID != ownerID {
+                settings.collectorStatus = settings.capturePaused ? "paused" : "idle"
+            }
+            settings.collectorOwnerID = ownerID
+            settings.collectorOwnerName = ownerName
+            settings.lastCollectorHeartbeat = now
+            try saveSettings(settings)
+            return true
+        }
+    }
+
+    public func updateCollectorStatus(ownerID: String, status: String, heartbeat: Date) throws -> Bool {
+        try withImmediateTransaction {
+            var settings = try loadSettings()
+            guard settings.collectorOwnerID == ownerID else {
+                return false
+            }
+            settings.collectorStatus = status
+            settings.lastCollectorHeartbeat = heartbeat
+            try saveSettings(settings)
+            return true
+        }
+    }
+
+    public func releaseCollectorLease(ownerID: String) throws {
+        try withImmediateTransaction {
+            var settings = try loadSettings()
+            guard settings.collectorOwnerID == ownerID else {
+                return
+            }
+            settings.collectorOwnerID = nil
+            settings.collectorOwnerName = nil
+            settings.lastCollectorHeartbeat = nil
+            settings.collectorStatus = settings.capturePaused ? "paused" : "stopped"
+            try saveSettings(settings)
         }
     }
 
@@ -586,6 +637,18 @@ public final class SQLiteDatabase: @unchecked Sendable {
 
     private func lastErrorMessage() -> String {
         String(cString: sqlite3_errmsg(handle))
+    }
+
+    private func withImmediateTransaction<T>(_ body: () throws -> T) throws -> T {
+        try execute("BEGIN IMMEDIATE TRANSACTION;")
+        do {
+            let value = try body()
+            try execute("COMMIT;")
+            return value
+        } catch {
+            try? execute("ROLLBACK;")
+            throw error
+        }
     }
 
     private func normalizeOptionalSetting(_ value: String?) -> String? {

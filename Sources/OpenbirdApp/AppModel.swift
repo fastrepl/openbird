@@ -49,16 +49,24 @@ final class AppModel: ObservableObject {
     private let chatService: ChatService
     private let retentionService: RetentionService
     private let collectorRuntime: CollectorRuntime
+    private let collectorOwnerID: String
 
     init() {
         do {
             let store = try OpenbirdStore()
+            let collectorOwnerID = CollectorRuntime.defaultOwnerID()
+            let collectorOwnerName = CollectorRuntime.defaultOwnerName()
             self.store = store
             self.journalGenerator = JournalGenerator(store: store)
             self.retrievalService = RetrievalService(store: store)
             self.chatService = ChatService(store: store, retrievalService: retrievalService)
             self.retentionService = RetentionService(store: store)
-            self.collectorRuntime = CollectorRuntime(store: store)
+            self.collectorOwnerID = collectorOwnerID
+            self.collectorRuntime = CollectorRuntime(
+                store: store,
+                ownerID: collectorOwnerID,
+                ownerName: collectorOwnerName
+            )
         } catch {
             fatalError("Failed to initialize Openbird store: \(error)")
         }
@@ -119,8 +127,45 @@ final class AppModel: ObservableObject {
         accessibilityTrusted == false || activeProvider == nil
     }
 
+    var isCollectorHeartbeatFresh: Bool {
+        guard let heartbeat = settings.lastCollectorHeartbeat else {
+            return false
+        }
+        return Date().timeIntervalSince(heartbeat) <= CollectorRuntime.leaseTimeout
+    }
+
+    var isCurrentProcessCollectorOwner: Bool {
+        isCollectorHeartbeatFresh && settings.collectorOwnerID == collectorOwnerID
+    }
+
+    var isCollectorActiveElsewhere: Bool {
+        isCollectorHeartbeatFresh &&
+        settings.collectorOwnerID != nil &&
+        settings.collectorOwnerID != collectorOwnerID
+    }
+
+    var collectorOwnerPath: String? {
+        settings.collectorOwnerName
+    }
+
+    var collectorOwnerDisplayName: String? {
+        guard let ownerPath = collectorOwnerPath else {
+            return nil
+        }
+        let lastComponent = URL(fileURLWithPath: ownerPath).lastPathComponent
+        return lastComponent.isEmpty ? ownerPath : lastComponent
+    }
+
     var captureStatusLabel: String {
-        if settings.capturePaused { return "Paused" }
+        if settings.capturePaused {
+            return isCollectorActiveElsewhere ? "Paused Elsewhere" : "Paused"
+        }
+        if isCollectorActiveElsewhere {
+            return "Active Elsewhere"
+        }
+        guard isCollectorHeartbeatFresh else {
+            return "Stopped"
+        }
         switch settings.collectorStatus {
         case "running":
             return "Capturing"
@@ -133,6 +178,14 @@ final class AppModel: ObservableObject {
         default:
             return "Stopped"
         }
+    }
+
+    var captureStatusDetail: String {
+        if isCollectorActiveElsewhere,
+           let owner = collectorOwnerDisplayName {
+            return "Owned by \(owner)"
+        }
+        return activeProvider?.name ?? "No active provider"
     }
 
     var availableChatModels: [ProviderModelInfo] {
@@ -192,6 +245,14 @@ final class AppModel: ObservableObject {
             return
         }
         accessibilityTrusted = isTrusted
+    }
+
+    func refreshCollectorState() async {
+        do {
+            settings = try await store.loadSettings()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func toggleCapturePaused() {

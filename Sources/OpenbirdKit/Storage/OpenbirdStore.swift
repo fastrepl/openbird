@@ -15,6 +15,18 @@ public actor OpenbirdStore {
         try database.saveSettings(settings)
     }
 
+    public func claimCollectorLease(ownerID: String, ownerName: String, now: Date, timeout: TimeInterval) throws -> Bool {
+        try database.claimCollectorLease(ownerID: ownerID, ownerName: ownerName, now: now, timeout: timeout)
+    }
+
+    public func updateCollectorStatus(ownerID: String, status: String, heartbeat: Date) throws -> Bool {
+        try database.updateCollectorStatus(ownerID: ownerID, status: status, heartbeat: heartbeat)
+    }
+
+    public func releaseCollectorLease(ownerID: String) throws {
+        try database.releaseCollectorLease(ownerID: ownerID)
+    }
+
     public func loadProviderConfigs() throws -> [ProviderConfig] {
         try database.loadProviderConfigs()
     }

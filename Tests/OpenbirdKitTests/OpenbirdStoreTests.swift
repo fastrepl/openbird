@@ -62,4 +62,55 @@ struct OpenbirdStoreTests {
         #expect(results.isEmpty == false)
         #expect(results.first?.appName == "VS Code")
     }
+
+    @Test func collectorLeaseBlocksSecondOwnerUntilHeartbeatExpires() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let now = Date()
+
+        let firstClaim = try await store.claimCollectorLease(
+            ownerID: "owner-a",
+            ownerName: "/Applications/Openbird.app",
+            now: now,
+            timeout: 20
+        )
+        let secondClaim = try await store.claimCollectorLease(
+            ownerID: "owner-b",
+            ownerName: "/tmp/Openbird Dev.app",
+            now: now.addingTimeInterval(5),
+            timeout: 20
+        )
+        let settings = try await store.loadSettings()
+
+        #expect(firstClaim)
+        #expect(secondClaim == false)
+        #expect(settings.collectorOwnerID == "owner-a")
+        #expect(settings.collectorOwnerName == "/Applications/Openbird.app")
+    }
+
+    @Test func collectorLeaseCanBeRecoveredAfterHeartbeatExpires() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let now = Date()
+
+        _ = try await store.claimCollectorLease(
+            ownerID: "owner-a",
+            ownerName: "/Applications/Openbird.app",
+            now: now,
+            timeout: 20
+        )
+        let recovered = try await store.claimCollectorLease(
+            ownerID: "owner-b",
+            ownerName: "/tmp/Openbird Dev.app",
+            now: now.addingTimeInterval(25),
+            timeout: 20
+        )
+        try await store.releaseCollectorLease(ownerID: "owner-b")
+        let settings = try await store.loadSettings()
+
+        #expect(recovered)
+        #expect(settings.collectorOwnerID == nil)
+        #expect(settings.collectorOwnerName == nil)
+        #expect(settings.collectorStatus == "stopped")
+    }
 }
