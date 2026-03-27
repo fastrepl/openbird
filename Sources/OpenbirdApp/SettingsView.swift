@@ -44,7 +44,7 @@ struct SettingsView: View {
                 TextField("Endpoint", text: $model.editingProvider.baseURL)
             }
             if model.editingProvider.kind.showsAPIKeyField {
-                SecureField(model.editingProvider.kind.requiresAPIKey ? "API key" : "API key (optional)", text: $model.editingProvider.apiKey)
+                TextField(model.editingProvider.kind.requiresAPIKey ? "API key" : "API key (optional)", text: $model.editingProvider.apiKey)
             }
             TextField("Chat model", text: $model.editingProvider.chatModel)
             if model.editingProvider.kind.supportsEmbeddings {
