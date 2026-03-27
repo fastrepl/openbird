@@ -25,6 +25,7 @@ final class AppModel: ObservableObject {
     @Published var settings = AppSettings()
     @Published var providerConfigs: [ProviderConfig] = []
     @Published var exclusions: [ExclusionRule] = []
+    @Published var installedApplications: [InstalledApplication] = []
     @Published var editingProvider = ProviderConfig.defaultOllama
     @Published var selectedDay = Date()
     @Published var todayJournal: DailyJournal?
@@ -36,11 +37,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var availableProviderModels: [ProviderModelInfo] = []
     @Published var errorMessage: String?
     @Published var isBusy = false
+    @Published var isLoadingInstalledApplications = false
     @Published var isShowingRawLogInspector = false
     @Published private(set) var accessibilityTrusted = false
 
     let permissionsService = PermissionsService()
     private let store: OpenbirdStore
+    private let installedApplicationService = InstalledApplicationService()
     private let journalGenerator: JournalGenerator
     private let retrievalService: RetrievalService
     private let chatService: ChatService
@@ -62,6 +65,7 @@ final class AppModel: ObservableObject {
 
         accessibilityTrusted = permissionsService.isAccessibilityTrusted
         collectorRuntime.start()
+        refreshInstalledApplications()
         Task {
             await refresh()
         }
@@ -285,9 +289,32 @@ final class AppModel: ObservableObject {
         return sanitized
     }
 
+    func installedApplicationName(for bundleID: String) -> String? {
+        installedApplications.first { $0.bundleID.caseInsensitiveCompare(bundleID) == .orderedSame }?.name
+    }
+
+    private func refreshInstalledApplications() {
+        isLoadingInstalledApplications = true
+        let service = installedApplicationService
+
+        Task {
+            let applications = await Task.detached(priority: .utility) {
+                service.listInstalledApplications()
+            }.value
+
+            installedApplications = applications
+            isLoadingInstalledApplications = false
+        }
+    }
+
     func addExclusion(kind: ExclusionKind, pattern: String) {
         let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return }
+        guard exclusions.contains(where: {
+            $0.kind == kind && $0.pattern.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) == false else {
+            return
+        }
 
         Task {
             do {

@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var model: AppModel
     @State private var newExclusionPattern = ""
     @State private var exclusionKind: ExclusionKind = .bundleID
+    private let bundleIDSuggestionLimit = 8
 
     var body: some View {
         ScrollView {
@@ -135,17 +136,33 @@ struct SettingsView: View {
                     Text("Domain").tag(ExclusionKind.domain)
                 }
                 .frame(width: 160)
-                TextField(exclusionKind == .bundleID ? "com.example.App" : "example.com", text: $newExclusionPattern)
+                TextField(
+                    exclusionKind == .bundleID ? "Search installed apps or enter bundle ID" : "example.com",
+                    text: $newExclusionPattern
+                )
+                .onSubmit(addCurrentExclusion)
                 Button("Add") {
-                    model.addExclusion(kind: exclusionKind, pattern: newExclusionPattern)
-                    newExclusionPattern = ""
+                    addCurrentExclusion()
                 }
+                .disabled(trimmedNewExclusionPattern.isEmpty)
+            }
+
+            if exclusionKind == .bundleID {
+                bundleIDSuggestionSection
             }
 
             ForEach(model.exclusions) { exclusion in
                 HStack {
                     VStack(alignment: .leading) {
-                        Text(exclusion.pattern)
+                        if exclusion.kind == .bundleID,
+                           let appName = model.installedApplicationName(for: exclusion.pattern) {
+                            Text(appName)
+                            Text(exclusion.pattern)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(exclusion.pattern)
+                        }
                         Text(exclusion.kind == .bundleID ? "Bundle ID" : "Domain")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -158,6 +175,51 @@ struct SettingsView: View {
                 .padding(14)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
             }
+        }
+    }
+
+    @ViewBuilder
+    private var bundleIDSuggestionSection: some View {
+        if model.isLoadingInstalledApplications {
+            Text("Loading installed apps…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if bundleIDSuggestions.isEmpty == false {
+            VStack(spacing: 0) {
+                ForEach(bundleIDSuggestions) { application in
+                    Button {
+                        model.addExclusion(kind: .bundleID, pattern: application.bundleID)
+                        newExclusionPattern = ""
+                    } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(application.name)
+                                    .foregroundStyle(.primary)
+                                Text(application.bundleID)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("Add")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    if application.id != bundleIDSuggestions.last?.id {
+                        Divider()
+                    }
+                }
+            }
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
+        } else if trimmedNewExclusionPattern.isEmpty == false {
+            Text("No matching installed apps. You can still enter a bundle ID manually.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -189,5 +251,43 @@ struct SettingsView: View {
                 text.wrappedValue = selection
             }
         )
+    }
+
+    private var trimmedNewExclusionPattern: String {
+        newExclusionPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var excludedBundleIDs: Set<String> {
+        Set(
+            model.exclusions
+                .filter { $0.kind == .bundleID }
+                .map { $0.pattern.lowercased() }
+        )
+    }
+
+    private var bundleIDSuggestions: [InstalledApplication] {
+        let query = trimmedNewExclusionPattern
+
+        return Array(
+            model.installedApplications
+                .filter { application in
+                    guard excludedBundleIDs.contains(application.bundleID.lowercased()) == false else {
+                        return false
+                    }
+
+                    guard query.isEmpty == false else {
+                        return true
+                    }
+
+                    return application.name.localizedCaseInsensitiveContains(query)
+                        || application.bundleID.localizedCaseInsensitiveContains(query)
+                }
+                .prefix(bundleIDSuggestionLimit)
+        )
+    }
+
+    private func addCurrentExclusion() {
+        model.addExclusion(kind: exclusionKind, pattern: trimmedNewExclusionPattern)
+        newExclusionPattern = ""
     }
 }
