@@ -19,4 +19,10 @@ struct ProviderConnectionAdvisorTests {
         #expect(ProviderConnectionAdvisor.shouldReplaceChatModel("") == true)
         #expect(ProviderConnectionAdvisor.shouldReplaceEmbeddingModel("nomic-embed-text") == false)
     }
+
+    @Test func detectsEmbeddingModels() {
+        #expect(ProviderConnectionAdvisor.isEmbeddingModel("text-embedding-3-large"))
+        #expect(ProviderConnectionAdvisor.isEmbeddingModel("nomic-embed-text"))
+        #expect(ProviderConnectionAdvisor.isEmbeddingModel("claude-sonnet-4-5") == false)
+    }
 }

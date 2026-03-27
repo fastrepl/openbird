@@ -33,6 +33,7 @@ final class AppModel: ObservableObject {
     @Published var chatMessages: [ChatMessage] = []
     @Published var chatInput = ""
     @Published var providerStatusMessage = ""
+    @Published private(set) var availableProviderModels: [ProviderModelInfo] = []
     @Published var errorMessage: String?
     @Published var isBusy = false
     @Published var isShowingRawLogInspector = false
@@ -130,6 +131,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    var availableChatModels: [ProviderModelInfo] {
+        let models = availableProviderModels.filter { ProviderConnectionAdvisor.isEmbeddingModel($0.id) == false }
+        return models.isEmpty ? availableProviderModels : models
+    }
+
+    var availableEmbeddingModels: [ProviderModelInfo] {
+        availableProviderModels.filter { ProviderConnectionAdvisor.isEmbeddingModel($0.id) }
+    }
+
     private var isRunningFromAppBundle: Bool {
         Bundle.main.bundleURL.pathExtension == "app"
     }
@@ -140,6 +150,7 @@ final class AppModel: ObservableObject {
         defer { isBusy = false }
 
         do {
+            let previousProviderID = editingProvider.id
             settings = try await store.loadSettings()
             providerConfigs = try await store.loadProviderConfigs()
             exclusions = try await store.loadExclusions()
@@ -147,6 +158,9 @@ final class AppModel: ObservableObject {
                 editingProvider = activeProvider
             } else if let first = providerConfigs.first {
                 editingProvider = first
+            }
+            if editingProvider.id != previousProviderID {
+                availableProviderModels = []
             }
 
             let dayRange = Calendar.current.dayRange(for: selectedDay)
@@ -211,16 +225,12 @@ final class AppModel: ObservableObject {
     func checkProviderConnection() {
         let config = sanitizedProviderConfig(editingProvider)
         providerStatusMessage = "Checking \(config.name)…"
+        availableProviderModels = []
         Task {
             do {
                 let provider = ProviderFactory.makeProvider(for: config)
-                let healthy = try await provider.healthCheck()
-                guard healthy else {
-                    providerStatusMessage = "Provider did not respond."
-                    return
-                }
-
                 let models = try await provider.listModels()
+                availableProviderModels = models
                 var updated = config
                 if ProviderConnectionAdvisor.shouldReplaceChatModel(updated.chatModel),
                    let suggestedChatModel = ProviderConnectionAdvisor.suggestedChatModel(from: models) {
@@ -257,6 +267,7 @@ final class AppModel: ObservableObject {
         }
 
         providerStatusMessage = ""
+        availableProviderModels = []
     }
 
     private func sanitizedProviderConfig(_ config: ProviderConfig) -> ProviderConfig {

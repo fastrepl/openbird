@@ -46,8 +46,32 @@ struct SettingsView: View {
             if model.editingProvider.kind.showsAPIKeyField {
                 TextField(model.editingProvider.kind.requiresAPIKey ? "API key" : "API key (optional)", text: $model.editingProvider.apiKey)
             }
+            if model.availableChatModels.isEmpty == false {
+                Picker("Detected chat models", selection: detectedModelSelection(
+                    text: $model.editingProvider.chatModel,
+                    models: model.availableChatModels
+                )) {
+                    Text("Select detected model").tag("")
+                    ForEach(model.availableChatModels) { providerModel in
+                        Text(providerModel.displayName).tag(providerModel.id)
+                    }
+                }
+                .frame(maxWidth: 360)
+            }
             TextField("Chat model", text: $model.editingProvider.chatModel)
             if model.editingProvider.kind.supportsEmbeddings {
+                if model.availableEmbeddingModels.isEmpty == false {
+                    Picker("Detected embedding models", selection: detectedModelSelection(
+                        text: $model.editingProvider.embeddingModel,
+                        models: model.availableEmbeddingModels
+                    )) {
+                        Text("Select detected model").tag("")
+                        ForEach(model.availableEmbeddingModels) { providerModel in
+                            Text(providerModel.displayName).tag(providerModel.id)
+                        }
+                    }
+                    .frame(maxWidth: 360)
+                }
                 TextField("Embedding model (optional)", text: $model.editingProvider.embeddingModel)
             }
 
@@ -90,6 +114,10 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Capture")
                 .font(.title3.bold())
+            Toggle("Pause capture", isOn: Binding(
+                get: { model.settings.capturePaused },
+                set: { _ in model.toggleCapturePaused() }
+            ))
             Stepper("Retention days: \(model.settings.retentionDays)", value: Binding(
                 get: { model.settings.retentionDays },
                 set: { model.updateRetentionDays($0) }
@@ -143,5 +171,23 @@ struct SettingsView: View {
                 Button("Delete all") { model.deleteData(scope: .all) }
             }
         }
+    }
+
+    private func detectedModelSelection(
+        text: Binding<String>,
+        models: [ProviderModelInfo]
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                let value = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                return models.contains(where: { $0.id == value }) ? value : ""
+            },
+            set: { selection in
+                guard selection.isEmpty == false else {
+                    return
+                }
+                text.wrappedValue = selection
+            }
+        )
     }
 }
