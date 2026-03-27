@@ -20,7 +20,7 @@ struct OnboardingView: View {
                 )
                 permissionRow(
                     title: "BYOK provider",
-                    description: "Needed for journal generation and chat. Ollama and LM Studio presets are included.",
+                    description: "Needed for journal generation and chat. Local and hosted providers are built in.",
                     isComplete: model.activeProvider != nil
                 )
             }

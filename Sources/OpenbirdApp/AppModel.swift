@@ -149,7 +149,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func saveEditingProvider(makeActive: Bool = false) {
+    func saveEditingProvider() {
         Task {
             do {
                 var provider = sanitizedProviderConfig(editingProvider)
@@ -158,25 +158,9 @@ final class AppModel: ObservableObject {
                 try await store.saveProviderConfig(provider)
 
                 var settings = try await store.loadSettings()
-                if makeActive || settings.activeProviderID == nil {
-                    settings.activeProviderID = provider.id
-                    try await store.saveSettings(settings)
-                }
-                providerStatusMessage = "Saved provider settings."
-                await refresh()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    func activateProvider(_ provider: ProviderConfig) {
-        Task {
-            do {
-                var settings = try await store.loadSettings()
                 settings.activeProviderID = provider.id
                 try await store.saveSettings(settings)
-                providerStatusMessage = "Active provider set to \(provider.name)."
+                providerStatusMessage = "Saved provider settings."
                 await refresh()
             } catch {
                 errorMessage = error.localizedDescription
@@ -219,23 +203,32 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func useProviderPreset(_ preset: ProviderConfig) {
-        editingProvider = preset
+    func selectProviderKind(_ kind: ProviderKind) {
+        if editingProvider.kind == kind {
+            return
+        }
+
+        if let existing = providerConfigs.first(where: { $0.kind == kind && $0.isEnabled }) {
+            editingProvider = existing
+        } else if let existing = providerConfigs.first(where: { $0.kind == kind }) {
+            editingProvider = existing
+        } else {
+            editingProvider = ProviderConfig.defaultPreset(for: kind)
+        }
+
+        providerStatusMessage = ""
     }
 
     private func sanitizedProviderConfig(_ config: ProviderConfig) -> ProviderConfig {
         var sanitized = config
+        sanitized.name = sanitized.kind.defaultName
         sanitized.baseURL = config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        switch sanitized.kind {
-        case .ollama:
-            if sanitized.baseURL.isEmpty {
-                sanitized.baseURL = ProviderConfig.defaultOllama.baseURL
-            }
-        case .openAICompatible:
-            if sanitized.baseURL.isEmpty {
-                sanitized.baseURL = ProviderConfig.defaultLMStudio.baseURL
-            }
+        if sanitized.baseURL.isEmpty {
+            sanitized.baseURL = sanitized.kind.defaultBaseURL
+        }
+        if sanitized.kind.supportsEmbeddings == false {
+            sanitized.embeddingModel = ""
         }
 
         return sanitized

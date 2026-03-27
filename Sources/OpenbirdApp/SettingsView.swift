@@ -24,50 +24,41 @@ struct SettingsView: View {
             Text("Providers")
                 .font(.title3.bold())
 
-            HStack {
-                Button("Use Ollama Preset") {
-                    model.useProviderPreset(.defaultOllama)
-                }
-                Button("Use LM Studio Preset") {
-                    model.useProviderPreset(.defaultLMStudio)
-                }
-            }
-
-            Picker("Configured providers", selection: Binding(
-                get: { model.editingProvider.id },
-                set: { newID in
-                    if let config = model.providerConfigs.first(where: { $0.id == newID }) {
-                        model.editingProvider = config
-                    }
-                }
+            Picker("Provider", selection: Binding(
+                get: { model.editingProvider.kind },
+                set: { model.selectProviderKind($0) }
             )) {
-                ForEach(model.providerConfigs) { config in
-                    Text(config.name).tag(config.id)
-                }
-            }
-
-            TextField("Name", text: $model.editingProvider.name)
-            Picker("Kind", selection: $model.editingProvider.kind) {
                 ForEach(ProviderKind.allCases, id: \.self) { kind in
                     Text(kind.displayName).tag(kind)
                 }
             }
-            TextField("Base URL", text: $model.editingProvider.baseURL)
-            SecureField("API Key (optional)", text: $model.editingProvider.apiKey)
+            .frame(maxWidth: 280)
+
+            if let providerDescription {
+                Text(providerDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if model.editingProvider.kind.showsBaseURLField {
+                TextField("Endpoint", text: $model.editingProvider.baseURL)
+            }
+            if model.editingProvider.kind.showsAPIKeyField {
+                SecureField(model.editingProvider.kind.requiresAPIKey ? "API key" : "API key (optional)", text: $model.editingProvider.apiKey)
+            }
             TextField("Chat model", text: $model.editingProvider.chatModel)
-            TextField("Embedding model", text: $model.editingProvider.embeddingModel)
+            if model.editingProvider.kind.supportsEmbeddings {
+                TextField("Embedding model (optional)", text: $model.editingProvider.embeddingModel)
+            }
 
             HStack {
                 Button("Check Connection") {
                     model.checkProviderConnection()
                 }
                 Button("Save") {
-                    model.saveEditingProvider(makeActive: model.activeProvider == nil)
+                    model.saveEditingProvider()
                 }
                 .buttonStyle(.borderedProminent)
-                Button("Make Active") {
-                    model.activateProvider(model.editingProvider)
-                }
             }
 
             if model.providerStatusMessage.isEmpty == false {
@@ -75,6 +66,23 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var providerDescription: String? {
+        switch model.editingProvider.kind {
+        case .ollama:
+            return "Runs fully local. Default endpoint is 127.0.0.1:11434."
+        case .openAICompatible:
+            return "Use this for LM Studio, vLLM, LocalAI, or any OpenAI-compatible endpoint."
+        case .openAI:
+            return "Uses your OpenAI API key with the standard OpenAI API."
+        case .anthropic:
+            return "Uses Claude for journal generation and chat. Embeddings stay on local search."
+        case .google:
+            return "Uses a Gemini API key from Google AI Studio."
+        case .openRouter:
+            return "Uses one OpenRouter key to access many hosted models."
         }
     }
 
