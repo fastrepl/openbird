@@ -2,37 +2,30 @@
 
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-  echo "usage: $0 <tag> <output-dir>" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "usage: $0 <tag> <output-dir> [bundle-id]" >&2
   exit 1
 fi
 
 TAG="$1"
 OUTPUT_DIR="$2"
-BUILD_DIR=".build/arm64-apple-macosx/release"
-STAGE_DIR="${OUTPUT_DIR}/openbird-${TAG}-macos-arm64"
-ARCHIVE_BASENAME="openbird-${TAG}-macos-arm64"
+BUNDLE_ID="${3:-com.computelesscomputer.openbird}"
+VERSION="${TAG#v}"
+BUILD_DIR="$(swift build -c release --show-bin-path)"
+APP_DIR="${OUTPUT_DIR}/Openbird.app"
+CONTENTS_DIR="${APP_DIR}/Contents"
+MACOS_DIR="${CONTENTS_DIR}/MacOS"
+PLIST_TEMPLATE="packaging/Openbird-Info.plist.template"
 
 mkdir -p "$OUTPUT_DIR"
-rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR"
+rm -rf "$APP_DIR"
+mkdir -p "$MACOS_DIR"
 
-cp "$BUILD_DIR/OpenbirdApp" "$STAGE_DIR/"
-cp "$BUILD_DIR/OpenbirdCollector" "$STAGE_DIR/"
-cp README.md "$STAGE_DIR/"
+cp "$BUILD_DIR/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
+cp "$BUILD_DIR/OpenbirdCollector" "${MACOS_DIR}/OpenbirdCollector"
+chmod +x "${MACOS_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdCollector"
 
-cat > "$STAGE_DIR/RELEASE.txt" <<EOF
-Openbird ${TAG}
-
-Included artifacts:
-- OpenbirdApp
-- OpenbirdCollector
-
-These are unsigned macOS arm64 release binaries built via SwiftPM.
-EOF
-
-(
-  cd "$OUTPUT_DIR"
-  tar -czf "${ARCHIVE_BASENAME}.tar.gz" "${ARCHIVE_BASENAME}"
-  shasum -a 256 "${ARCHIVE_BASENAME}.tar.gz" > "${ARCHIVE_BASENAME}.sha256"
-)
+sed \
+  -e "s/__BUNDLE_IDENTIFIER__/${BUNDLE_ID}/g" \
+  -e "s/__VERSION__/${VERSION}/g" \
+  "$PLIST_TEMPLATE" > "${CONTENTS_DIR}/Info.plist"

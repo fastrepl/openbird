@@ -98,12 +98,11 @@ Download the latest release here:
 
 [Latest Release](https://github.com/ComputelessComputer/openbird/releases/latest)
 
-Today, releases are shipped as an unsigned macOS arm64 tarball containing:
+New releases are shipped as a signed macOS Apple Silicon DMG.
 
-- `OpenbirdApp`
-- `OpenbirdCollector`
+If you are downloading an older tag, you may still see the previous unsigned tarball format.
 
-That means macOS may warn on first launch. Signed `.app` packaging is still pending.
+Open the DMG, drag `Openbird.app` into `Applications`, then launch it.
 
 ## Quick Start
 
