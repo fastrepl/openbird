@@ -56,7 +56,7 @@ public struct ProviderConfig: Identifiable, Codable, Hashable, Sendable {
     public static let defaultOllama = ProviderConfig(
         name: "Local Ollama",
         kind: .ollama,
-        baseURL: "http://127.0.0.1:11434",
+        baseURL: "http://127.0.0.1:11434/v1",
         chatModel: "llama3.2",
         embeddingModel: "nomic-embed-text",
         isEnabled: false

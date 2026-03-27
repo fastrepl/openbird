@@ -147,7 +147,7 @@ final class AppModel: ObservableObject {
     func saveEditingProvider(makeActive: Bool = false) {
         Task {
             do {
-                var provider = editingProvider
+                var provider = sanitizedProviderConfig(editingProvider)
                 provider.updatedAt = Date()
                 provider.isEnabled = true
                 try await store.saveProviderConfig(provider)
@@ -180,13 +180,34 @@ final class AppModel: ObservableObject {
     }
 
     func checkProviderConnection() {
-        let config = editingProvider
+        let config = sanitizedProviderConfig(editingProvider)
         providerStatusMessage = "Checking \(config.name)…"
         Task {
             do {
                 let provider = ProviderFactory.makeProvider(for: config)
                 let healthy = try await provider.healthCheck()
-                providerStatusMessage = healthy ? "Connection successful." : "Provider did not respond."
+                guard healthy else {
+                    providerStatusMessage = "Provider did not respond."
+                    return
+                }
+
+                let models = try await provider.listModels()
+                var updated = config
+                if ProviderConnectionAdvisor.shouldReplaceChatModel(updated.chatModel),
+                   let suggestedChatModel = ProviderConnectionAdvisor.suggestedChatModel(from: models) {
+                    updated.chatModel = suggestedChatModel
+                }
+                if ProviderConnectionAdvisor.shouldReplaceEmbeddingModel(updated.embeddingModel),
+                   let suggestedEmbeddingModel = ProviderConnectionAdvisor.suggestedEmbeddingModel(from: models) {
+                    updated.embeddingModel = suggestedEmbeddingModel
+                }
+                editingProvider = updated
+
+                if models.isEmpty {
+                    providerStatusMessage = "Connection successful."
+                } else {
+                    providerStatusMessage = "Connection successful. Found \(models.count) model\(models.count == 1 ? "" : "s")."
+                }
             } catch {
                 providerStatusMessage = "Connection failed: \(error.localizedDescription)"
             }
@@ -195,6 +216,24 @@ final class AppModel: ObservableObject {
 
     func useProviderPreset(_ preset: ProviderConfig) {
         editingProvider = preset
+    }
+
+    private func sanitizedProviderConfig(_ config: ProviderConfig) -> ProviderConfig {
+        var sanitized = config
+        sanitized.baseURL = config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch sanitized.kind {
+        case .ollama:
+            if sanitized.baseURL.isEmpty {
+                sanitized.baseURL = ProviderConfig.defaultOllama.baseURL
+            }
+        case .openAICompatible:
+            if sanitized.baseURL.isEmpty {
+                sanitized.baseURL = ProviderConfig.defaultLMStudio.baseURL
+            }
+        }
+
+        return sanitized
     }
 
     func addExclusion(kind: ExclusionKind, pattern: String) {

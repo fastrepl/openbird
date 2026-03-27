@@ -2,37 +2,38 @@ import Foundation
 import Testing
 @testable import OpenbirdKit
 
-struct ProviderTests {
-    @Test func openAICompatibleProviderParsesModelList() async throws {
+struct OllamaProviderTests {
+    @Test func stripsV1AndSetsOriginHeader() async throws {
         let config = ProviderConfig(
-            name: "LM Studio",
-            kind: .openAICompatible,
-            baseURL: "http://localhost:1234/v1",
-            chatModel: "qwen",
-            embeddingModel: "nomic"
+            name: "Ollama",
+            kind: .ollama,
+            baseURL: "http://127.0.0.1:11434/v1",
+            chatModel: "llama3.2",
+            embeddingModel: "nomic-embed-text"
         )
 
-        OpenAICompatibleMockURLProtocol.handler = { request in
-            #expect(request.url?.path == "/v1/models")
-            let payload = #"{"data":[{"id":"qwen"},{"id":"nomic"}]}"#
+        OllamaMockURLProtocol.handler = { request in
+            #expect(request.url?.absoluteString == "http://127.0.0.1:11434/api/tags")
+            #expect(request.value(forHTTPHeaderField: "Origin") == "http://127.0.0.1:11434")
+            let payload = #"{"models":[{"name":"llama3.2"},{"name":"nomic-embed-text"}]}"#
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, Data(payload.utf8))
         }
 
         let session = URLSession(configuration: {
             let configuration = URLSessionConfiguration.ephemeral
-            configuration.protocolClasses = [OpenAICompatibleMockURLProtocol.self]
+            configuration.protocolClasses = [OllamaMockURLProtocol.self]
             return configuration
         }())
 
-        let provider = OpenAICompatibleProvider(config: config, session: session)
+        let provider = OllamaProvider(config: config, session: session)
         let models = try await provider.listModels()
 
-        #expect(models.map { $0.id } == ["qwen", "nomic"])
+        #expect(models.map { $0.id } == ["llama3.2", "nomic-embed-text"])
     }
 }
 
-private final class OpenAICompatibleMockURLProtocol: URLProtocol, @unchecked Sendable {
+private final class OllamaMockURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool {

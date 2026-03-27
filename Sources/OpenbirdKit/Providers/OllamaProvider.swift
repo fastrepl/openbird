@@ -3,10 +3,12 @@ import Foundation
 public struct OllamaProvider: LLMProvider {
     public let config: ProviderConfig
     private let session: URLSession
+    private let normalizedBaseURL: URL
 
     public init(config: ProviderConfig, session: URLSession = .shared) {
         self.config = config
         self.session = session
+        self.normalizedBaseURL = OllamaProvider.makeNormalizedBaseURL(from: config.baseURL)
     }
 
     public func listModels() async throws -> [ProviderModelInfo] {
@@ -41,13 +43,13 @@ public struct OllamaProvider: LLMProvider {
         method: String = "GET",
         bodyData: Data? = nil
     ) async throws -> Response {
-        guard let baseURL = URL(string: config.baseURL) else {
-            throw URLError(.badURL)
-        }
-        let url = baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+        let url = normalizedBaseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let origin = originHeaderValue(for: normalizedBaseURL) {
+            request.setValue(origin, forHTTPHeaderField: "Origin")
+        }
         if let bodyData {
             request.httpBody = bodyData
         }
@@ -70,6 +72,37 @@ public struct OllamaProvider: LLMProvider {
             let message = String(data: data, encoding: .utf8) ?? "Request failed"
             throw NSError(domain: "OllamaProvider", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }
+    }
+
+    private func originHeaderValue(for url: URL) -> String? {
+        guard let scheme = url.scheme,
+              let host = url.host
+        else {
+            return nil
+        }
+
+        if let port = url.port {
+            return "\(scheme)://\(host):\(port)"
+        }
+
+        return "\(scheme)://\(host)"
+    }
+
+    private static func makeNormalizedBaseURL(from rawValue: String) -> URL {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: trimmed), components.scheme != nil else {
+            return URL(string: "http://127.0.0.1:11434")!
+        }
+
+        if components.path == "/v1" || components.path == "/v1/" {
+            components.path = ""
+        }
+
+        if components.path.hasSuffix("/") {
+            components.path.removeLast()
+        }
+
+        return components.url ?? URL(string: "http://127.0.0.1:11434")!
     }
 }
 
