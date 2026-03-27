@@ -82,15 +82,18 @@ public actor JournalGenerator {
         }
 
         return groups.map { group in
-            let titles = group.map(\.displayTitle).filter { $0.isEmpty == false }
-            let dominant = mostFrequentString(in: titles) ?? group.first?.appName ?? "Activity"
-            let bullets = Array(group.prefix(4)).map(makeBullet(for:))
+            let dominant = preferredHeading(in: group)
+            let bullets = group
+                .map(makeBullet(for:))
+                .filter { $0.isEmpty == false }
+                .deduplicatedByNormalizedText()
+                .prefix(4)
             let start = OpenbirdDateFormatting.timeString(for: group.first?.startedAt ?? Date())
             let end = OpenbirdDateFormatting.timeString(for: group.last?.endedAt ?? Date())
             return JournalSection(
                 heading: dominant,
                 timeRange: "\(start) - \(end)",
-                bullets: bullets,
+                bullets: Array(bullets),
                 sourceEventIDs: group.map(\.id)
             )
         }
@@ -98,7 +101,7 @@ public actor JournalGenerator {
 
     private func makeBullet(for event: ActivityEvent) -> String {
         var pieces = [event.appName]
-        if event.windowTitle.isEmpty == false && event.windowTitle != event.appName {
+        if event.windowTitle.isEmpty == false && event.windowTitle.normalizedComparisonKey != event.appName.normalizedComparisonKey {
             pieces.append(event.windowTitle)
         }
         if let url = event.url, url.isEmpty == false {
@@ -107,7 +110,7 @@ public actor JournalGenerator {
         if event.excerpt.isEmpty == false {
             pieces.append(event.excerpt)
         }
-        return pieces.joined(separator: " • ")
+        return pieces.deduplicatedByNormalizedText().joined(separator: " • ")
     }
 
     private func sectionPrompt(_ section: JournalSection) -> String {
@@ -136,11 +139,41 @@ public actor JournalGenerator {
         return markdown.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func mostFrequentString(in values: [String]) -> String? {
-        values.reduce(into: [:]) { counts, value in
-            counts[value, default: 0] += 1
+    private func preferredHeading(in group: [ActivityEvent]) -> String {
+        guard let appName = group.first?.appName else { return "Activity" }
+
+        let ranked = group.reduce(into: [String: Int]()) { counts, event in
+            let title = event.displayTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title.isEmpty == false else { return }
+
+            var score = 1
+            if title.normalizedComparisonKey != appName.normalizedComparisonKey {
+                score += 4
+            }
+            if title.count > appName.count {
+                score += 1
+            }
+
+            counts[title, default: 0] += score
         }
-        .max(by: { $0.value < $1.value })?
-        .key
+        return ranked.max(by: { $0.value < $1.value })?.key ?? appName
+    }
+}
+
+private extension Array where Element == String {
+    func deduplicatedByNormalizedText() -> [String] {
+        var seen = Set<String>()
+        return filter { value in
+            seen.insert(value.normalizedComparisonKey).inserted
+        }
+    }
+}
+
+private extension String {
+    var normalizedComparisonKey: String {
+        lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
     }
 }
