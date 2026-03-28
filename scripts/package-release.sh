@@ -17,7 +17,6 @@ CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 PLIST_TEMPLATE="packaging/Openbird-Info.plist.template"
-ICON_PATH="packaging/Openbird.icns"
 
 mkdir -p "$OUTPUT_DIR"
 rm -rf "$APP_DIR"
@@ -25,7 +24,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
 chmod +x "${MACOS_DIR}/OpenbirdApp"
-install -m 644 "$ICON_PATH" "${RESOURCES_DIR}/Openbird.icns"
+"$(dirname "$0")/build-app-icon.sh" "${RESOURCES_DIR}/Openbird.icns"
 
 sed \
   -e "s/__BUNDLE_IDENTIFIER__/${BUNDLE_ID}/g" \
