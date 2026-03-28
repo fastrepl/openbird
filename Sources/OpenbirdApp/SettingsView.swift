@@ -8,6 +8,34 @@ struct SettingsView: View {
     @State private var exclusionKind: ExclusionKind = .bundleID
     private let bundleIDSuggestionLimit = 8
 
+    private enum ProviderStatusStyle {
+        case success
+        case failure
+        case neutral
+
+        var symbolName: String {
+            switch self {
+            case .success:
+                return "checkmark.circle.fill"
+            case .failure:
+                return "exclamationmark.circle.fill"
+            case .neutral:
+                return "ellipsis.circle.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .success:
+                return .green
+            case .failure:
+                return .red
+            case .neutral:
+                return .secondary
+            }
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -64,9 +92,13 @@ struct SettingsView: View {
                 LabeledContent("Chat model", value: model.editingProvider.chatModel)
             }
             if model.providerStatusMessage.isEmpty == false {
-                Text(model.providerStatusMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: providerStatusStyle.symbolName)
+                        .foregroundStyle(providerStatusStyle.color)
+                    Text(model.providerStatusMessage)
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
             }
         }
         .onAppear {
@@ -95,6 +127,16 @@ struct SettingsView: View {
         case .openRouter:
             return "Uses one OpenRouter key to access many hosted models."
         }
+    }
+
+    private var providerStatusStyle: ProviderStatusStyle {
+        if model.providerStatusMessage.hasPrefix("Connection successful") {
+            return .success
+        }
+        if model.providerStatusMessage.hasPrefix("Connection failed") {
+            return .failure
+        }
+        return .neutral
     }
 
     private var captureSection: some View {
