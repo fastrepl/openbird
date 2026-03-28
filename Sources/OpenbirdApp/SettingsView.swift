@@ -46,7 +46,6 @@ struct SettingsView: View {
             }
             .padding(28)
         }
-        .navigationTitle("Settings")
     }
 
     private var providerSection: some View {
@@ -210,13 +209,24 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if let update = model.availableUpdate {
-                Text("Openbird \(update.version) is ready to install from the toolbar.")
+                Text("Openbird \(update.version) is ready to install.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if model.updateStatusMessage.isEmpty == false {
                 Text(model.updateStatusMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if model.appVersion != nil {
+                Button(updateActionTitle) {
+                    if model.availableUpdate != nil {
+                        model.installAvailableUpdate()
+                    } else {
+                        model.checkForUpdates()
+                    }
+                }
+                .disabled(isUpdateActionDisabled)
             }
         }
     }
@@ -318,6 +328,20 @@ struct SettingsView: View {
 
     private var trimmedNewExclusionPattern: String {
         newExclusionPattern.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var updateActionTitle: String {
+        if model.isInstallingUpdate {
+            return "Installing…"
+        }
+        if let update = model.availableUpdate {
+            return "Install Openbird \(update.version)"
+        }
+        return model.isCheckingForUpdates ? "Checking…" : "Check for Updates"
+    }
+
+    private var isUpdateActionDisabled: Bool {
+        model.isInstallingUpdate || model.isCheckingForUpdates || (model.availableUpdate == nil && model.appVersion == nil)
     }
 
     private var excludedBundleIDs: Set<String> {

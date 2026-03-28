@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 private enum OpenbirdSceneID {
@@ -24,27 +23,22 @@ struct OpenbirdAppMain: App {
         .commands {
             OpenbirdAppCommands(model: model)
         }
+
+        Settings {
+            SettingsView(model: model)
+                .frame(minWidth: 760, idealWidth: 760, minHeight: 640, idealHeight: 640)
+        }
     }
 }
 
 private struct OpenbirdAppCommands: Commands {
     @ObservedObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(after: .appInfo) {
             Button("Check for Updates…") {
                 model.checkForUpdates()
             }
-        }
-
-        CommandGroup(replacing: .appSettings) {
-            Button("Settings…") {
-                model.selection = .settings
-                openWindow(id: OpenbirdSceneID.main)
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            .keyboardShortcut(",", modifiers: .command)
         }
     }
 }

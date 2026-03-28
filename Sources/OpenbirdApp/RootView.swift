@@ -14,8 +14,6 @@ struct RootView: View {
                     .tag(AppModel.SidebarItem.today)
                 Label("Chat", systemImage: "bubble.left.and.bubble.right")
                     .tag(AppModel.SidebarItem.chat)
-                Label("Settings", systemImage: "slider.horizontal.3")
-                    .tag(AppModel.SidebarItem.settings)
             }
             .navigationTitle("Openbird")
         } detail: {
@@ -25,8 +23,6 @@ struct RootView: View {
                     TodayView(model: model)
                 case .chat:
                     ChatView(model: model)
-                case .settings:
-                    SettingsView(model: model)
                 }
             }
         }
@@ -34,7 +30,7 @@ struct RootView: View {
             ToolbarItem(placement: .automatic) {
                 CaptureToolbarButton(model: model)
             }
-            if model.availableUpdate != nil || model.selection == .settings {
+            if model.availableUpdate != nil {
                 ToolbarItem(placement: .automatic) {
                     UpdateToolbarButton(model: model)
                 }

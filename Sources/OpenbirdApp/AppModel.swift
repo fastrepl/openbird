@@ -11,7 +11,6 @@ final class AppModel: ObservableObject {
     enum SidebarItem: String, CaseIterable, Identifiable {
         case today
         case chat
-        case settings
 
         var id: String { rawValue }
         var title: String {
@@ -20,8 +19,6 @@ final class AppModel: ObservableObject {
                 return "Today"
             case .chat:
                 return "Chat"
-            case .settings:
-                return "Settings"
             }
         }
     }

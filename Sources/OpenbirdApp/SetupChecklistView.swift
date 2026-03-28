@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SetupChecklistView: View {
+    @Environment(\.openSettings) private var openSettings
     @ObservedObject var model: AppModel
     private let accessibilityStatusTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -73,7 +74,7 @@ struct SetupChecklistView: View {
                     isComplete: model.activeProvider != nil
                 ) {
                     Button("Open Provider Settings") {
-                        model.selection = .settings
+                        openSettings()
                     }
                 }
             }
