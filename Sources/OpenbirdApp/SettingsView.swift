@@ -40,7 +40,6 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 providerSection
-                updatesSection
                 exclusionSection
                 dataSection
             }
@@ -197,40 +196,6 @@ struct SettingsView: View {
         }
     }
 
-    private var updatesSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Updates")
-                .font(.title3.bold())
-
-            LabeledContent("Current version", value: model.appVersion ?? "Development build")
-
-            if model.appVersion == nil {
-                Text("Update checks are available in packaged Openbird releases.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if let update = model.availableUpdate {
-                Text("Openbird \(update.version) is ready to install.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if model.updateStatusMessage.isEmpty == false {
-                Text(model.updateStatusMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if model.appVersion != nil {
-                Button(updateActionTitle) {
-                    if model.availableUpdate != nil {
-                        model.installAvailableUpdate()
-                    } else {
-                        model.checkForUpdates()
-                    }
-                }
-                .disabled(isUpdateActionDisabled)
-            }
-        }
-    }
-
     @ViewBuilder
     private var bundleIDSuggestionSection: some View {
         if model.isLoadingInstalledApplications {
@@ -328,20 +293,6 @@ struct SettingsView: View {
 
     private var trimmedNewExclusionPattern: String {
         newExclusionPattern.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var updateActionTitle: String {
-        if model.isInstallingUpdate {
-            return "Installing…"
-        }
-        if let update = model.availableUpdate {
-            return "Install Openbird \(update.version)"
-        }
-        return model.isCheckingForUpdates ? "Checking…" : "Check for Updates"
-    }
-
-    private var isUpdateActionDisabled: Bool {
-        model.isInstallingUpdate || model.isCheckingForUpdates || (model.availableUpdate == nil && model.appVersion == nil)
     }
 
     private var excludedBundleIDs: Set<String> {
