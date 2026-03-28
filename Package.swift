@@ -16,10 +16,6 @@ let package = Package(
             name: "OpenbirdApp",
             targets: ["OpenbirdApp"]
         ),
-        .executable(
-            name: "OpenbirdCollector",
-            targets: ["OpenbirdCollector"]
-        ),
     ],
     targets: [
         .systemLibrary(
@@ -31,10 +27,6 @@ let package = Package(
         ),
         .executableTarget(
             name: "OpenbirdApp",
-            dependencies: ["OpenbirdKit"]
-        ),
-        .executableTarget(
-            name: "OpenbirdCollector",
             dependencies: ["OpenbirdKit"]
         ),
         .testTarget(

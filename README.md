@@ -145,12 +145,6 @@ swift build
 swift run OpenbirdApp
 ```
 
-The collector can also be started directly:
-
-```bash
-swift run OpenbirdCollector
-```
-
 Run tests with:
 
 ```bash

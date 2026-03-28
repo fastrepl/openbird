@@ -22,8 +22,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
 
 cp "$BUILD_DIR/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
-cp "$BUILD_DIR/OpenbirdCollector" "${MACOS_DIR}/OpenbirdCollector"
-chmod +x "${MACOS_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdCollector"
+chmod +x "${MACOS_DIR}/OpenbirdApp"
 
 sed \
   -e "s/__BUNDLE_IDENTIFIER__/${BUNDLE_ID}/g" \

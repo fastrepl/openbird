@@ -28,7 +28,6 @@ trap 'rm -f "${TMP_PLIST}"' EXIT
 mkdir -p "${MACOS_DIR}"
 
 install -m 755 "${BUILD_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
-install -m 755 "${BUILD_DIR}/OpenbirdCollector" "${MACOS_DIR}/OpenbirdCollector"
 
 sed \
   -e "s/__BUNDLE_IDENTIFIER__/com.computelesscomputer.openbird.dev/g" \
