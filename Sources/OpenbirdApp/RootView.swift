@@ -28,32 +28,13 @@ struct RootView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if let update = model.availableUpdate {
-                UpdateBannerView(
-                    update: update,
-                    downloadAction: model.openAvailableUpdate,
-                    dismissAction: model.dismissAvailableUpdate
-                )
-                .padding(.horizontal)
-                .padding(.top, 12)
-            }
-        }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 CaptureToolbarButton(model: model)
             }
-            ToolbarItem(placement: .automatic) {
-                Button("Refresh") {
-                    Task { await model.refresh() }
-                }
-            }
-            if model.selection == .settings {
+            if model.availableUpdate != nil || model.selection == .settings {
                 ToolbarItem(placement: .automatic) {
-                    Button(model.isCheckingForUpdates ? "Checking…" : "Check for Updates") {
-                        model.checkForUpdates()
-                    }
-                    .disabled(model.isCheckingForUpdates || model.appVersion == nil)
+                    UpdateToolbarButton(model: model)
                 }
             }
         }
@@ -80,33 +61,6 @@ struct RootView: View {
         } message: {
             Text(model.errorMessage ?? "Unknown error")
         }
-    }
-}
-
-private struct UpdateBannerView: View {
-    let update: AppUpdate
-    let downloadAction: () -> Void
-    let dismissAction: () -> Void
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Openbird \(update.version) is available")
-                    .font(.headline)
-                Text("Download the latest signed release from GitHub.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 12)
-            Button("Not now", action: dismissAction)
-            Button("Download", action: downloadAction)
-                .buttonStyle(.borderedProminent)
-        }
-        .padding(14)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -150,5 +104,41 @@ private struct CaptureToolbarButton: View {
         .onHover { hovering in
             isHovering = hovering
         }
+    }
+}
+
+private struct UpdateToolbarButton: View {
+    @ObservedObject var model: AppModel
+
+    private var title: String {
+        if model.isInstallingUpdate {
+            return "Updating…"
+        }
+        if let update = model.availableUpdate {
+            return "Update to \(update.version)"
+        }
+        return model.isCheckingForUpdates ? "Checking…" : "Check for Updates"
+    }
+
+    private var helpText: String {
+        if let update = model.availableUpdate {
+            return "Install Openbird \(update.version)"
+        }
+        if model.appVersion == nil {
+            return "Automatic updates are only available in packaged Openbird releases."
+        }
+        return "Check for a newer Openbird release."
+    }
+
+    var body: some View {
+        Button(title) {
+            if model.availableUpdate != nil {
+                model.installAvailableUpdate()
+            } else {
+                model.checkForUpdates()
+            }
+        }
+        .disabled(model.isInstallingUpdate || model.isCheckingForUpdates || (model.availableUpdate == nil && model.appVersion == nil))
+        .help(helpText)
     }
 }

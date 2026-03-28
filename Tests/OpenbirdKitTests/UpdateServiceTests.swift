@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import OpenbirdKit
 
+@Suite(.serialized)
 struct UpdateServiceTests {
     @Test func detectsNewerSemanticVersions() {
         #expect(UpdateService.isVersion("v0.1.2", newerThan: "0.1.1"))
@@ -19,7 +20,13 @@ struct UpdateServiceTests {
             let payload = """
             {
               "tag_name": "v0.1.2",
-              "html_url": "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.2"
+              "html_url": "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.2",
+              "assets": [
+                {
+                  "name": "openbird-v0.1.2-macos-arm64.dmg",
+                  "browser_download_url": "https://github.com/ComputelessComputer/openbird/releases/download/v0.1.2/openbird-v0.1.2-macos-arm64.dmg"
+                }
+              ]
             }
             """
             let response = HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -34,7 +41,8 @@ struct UpdateServiceTests {
 
         #expect(update == AppUpdate(
             version: "0.1.2",
-            releaseURL: URL(string: "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.2")!
+            releaseURL: URL(string: "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.2")!,
+            downloadURL: URL(string: "https://github.com/ComputelessComputer/openbird/releases/download/v0.1.2/openbird-v0.1.2-macos-arm64.dmg")!
         ))
     }
 
@@ -44,7 +52,41 @@ struct UpdateServiceTests {
             let payload = """
             {
               "tag_name": "v0.1.2",
-              "html_url": "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.2"
+              "html_url": "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.2",
+              "assets": [
+                {
+                  "name": "openbird-v0.1.2-macos-arm64.dmg",
+                  "browser_download_url": "https://github.com/ComputelessComputer/openbird/releases/download/v0.1.2/openbird-v0.1.2-macos-arm64.dmg"
+                }
+              ]
+            }
+            """
+            let response = HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(payload.utf8))
+        }
+
+        let service = UpdateService(
+            session: makeUpdateServiceSession(),
+            latestReleaseURL: endpoint
+        )
+        let update = try await service.latestUpdate(currentVersion: "0.1.2")
+
+        #expect(update == nil)
+    }
+
+    @Test func ignoresReleaseWithoutDiskImageAsset() async throws {
+        let endpoint = URL(string: "https://example.com/latest")!
+        UpdateServiceMockURLProtocol.handler = { _ in
+            let payload = """
+            {
+              "tag_name": "v0.1.3",
+              "html_url": "https://github.com/ComputelessComputer/openbird/releases/tag/v0.1.3",
+              "assets": [
+                {
+                  "name": "openbird-v0.1.3-macos-arm64.sha256",
+                  "browser_download_url": "https://github.com/ComputelessComputer/openbird/releases/download/v0.1.3/openbird-v0.1.3-macos-arm64.sha256"
+                }
+              ]
             }
             """
             let response = HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!

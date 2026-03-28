@@ -35,7 +35,15 @@ public final class UpdateService: Sendable {
             return nil
         }
 
-        return AppUpdate(version: latestVersion, releaseURL: release.htmlURL)
+        guard let downloadURL = release.assets.first(where: \.isDiskImage)?.downloadURL else {
+            return nil
+        }
+
+        return AppUpdate(
+            version: latestVersion,
+            releaseURL: release.htmlURL,
+            downloadURL: downloadURL
+        )
     }
 
     static func isVersion(_ candidate: String, newerThan current: String) -> Bool {
@@ -71,9 +79,25 @@ public final class UpdateService: Sendable {
 private struct GitHubRelease: Decodable {
     let tagName: String
     let htmlURL: URL
+    let assets: [GitHubReleaseAsset]
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case htmlURL = "html_url"
+        case assets
+    }
+}
+
+private struct GitHubReleaseAsset: Decodable {
+    let name: String
+    let downloadURL: URL
+
+    var isDiskImage: Bool {
+        name.hasSuffix(".dmg")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case downloadURL = "browser_download_url"
     }
 }

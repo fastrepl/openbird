@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isBusy = false
     @Published var isCheckingForUpdates = false
+    @Published var isInstallingUpdate = false
     @Published var isLoadingInstalledApplications = false
     @Published var isShowingRawLogInspector = false
     @Published private(set) var accessibilityTrusted = false
@@ -60,6 +61,7 @@ final class AppModel: ObservableObject {
     private let collectorRuntime: CollectorRuntime
     private let collectorOwnerID: String
     private let updateService: UpdateService
+    private let appUpdater: AppUpdater
     private let userDefaults: UserDefaults
     private var providerConnectionTask: Task<Void, Never>?
     private var providerSaveTask: Task<Void, Never>?
@@ -69,10 +71,12 @@ final class AppModel: ObservableObject {
 
     init(
         userDefaults: UserDefaults = .standard,
-        updateService: UpdateService = UpdateService()
+        updateService: UpdateService = UpdateService(),
+        appUpdater: AppUpdater = AppUpdater()
     ) {
         self.userDefaults = userDefaults
         self.updateService = updateService
+        self.appUpdater = appUpdater
         self.appVersion = Self.currentAppVersion()
 
         do {
@@ -301,25 +305,34 @@ final class AppModel: ObservableObject {
         checkForUpdatesIfNeeded()
     }
 
-    func dismissAvailableUpdate() {
+    func installAvailableUpdate() {
         guard let availableUpdate else {
             return
         }
-
-        userDefaults.set(availableUpdate.version, forKey: Self.dismissedUpdateVersionKey)
-        self.availableUpdate = nil
-        updateStatusMessage = ""
-    }
-
-    func openAvailableUpdate() {
-        guard let availableUpdate else {
+        guard isInstallingUpdate == false else {
             return
         }
 
-        userDefaults.set(availableUpdate.version, forKey: Self.dismissedUpdateVersionKey)
-        self.availableUpdate = nil
-        updateStatusMessage = ""
-        NSWorkspace.shared.open(availableUpdate.releaseURL)
+        isInstallingUpdate = true
+        updateStatusMessage = "Installing Openbird \(availableUpdate.version)…"
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await appUpdater.install(
+                    update: availableUpdate,
+                    appBundleURL: Bundle.main.bundleURL
+                )
+                NSApp.terminate(nil)
+            } catch {
+                isInstallingUpdate = false
+                updateStatusMessage = "Openbird \(availableUpdate.version) is available."
+                errorMessage = "Failed to update Openbird: \(error.localizedDescription)"
+            }
+        }
     }
 
     func refreshCollectorState() async {
@@ -583,6 +596,9 @@ final class AppModel: ObservableObject {
             if showUpToDateMessage {
                 updateStatusMessage = "Update checks are only available in packaged Openbird releases."
             }
+            return
+        }
+        guard isInstallingUpdate == false else {
             return
         }
 

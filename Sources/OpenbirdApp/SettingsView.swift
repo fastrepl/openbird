@@ -177,15 +177,12 @@ struct SettingsView: View {
 
             LabeledContent("Current version", value: model.appVersion ?? "Development build")
 
-            if let update = model.availableUpdate {
-                Button("Download \(update.version)") {
-                    model.openAvailableUpdate()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-
             if model.appVersion == nil {
                 Text("Update checks are available in packaged Openbird releases.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let update = model.availableUpdate {
+                Text("Openbird \(update.version) is ready to install from the toolbar.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if model.updateStatusMessage.isEmpty == false {
