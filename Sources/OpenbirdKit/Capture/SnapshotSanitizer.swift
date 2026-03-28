@@ -133,6 +133,15 @@ struct SnapshotSanitizer {
             return true
         }
 
+        if bundleId == "com.apple.MobileSMS" {
+            if messageChromeLines.contains(normalized) {
+                return true
+            }
+            if normalized.hasPrefix("search ") {
+                return true
+            }
+        }
+
         if bundleId == "com.tinyspeck.slackmacgap" && normalized == "slack" {
             return true
         }
@@ -158,3 +167,12 @@ private extension String {
             .joined(separator: " ")
     }
 }
+
+private let messageChromeLines: Set<String> = [
+    "compose",
+    "filter",
+    "message",
+    "messages",
+    "search",
+    "start facetime",
+]

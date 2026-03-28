@@ -53,6 +53,55 @@ struct SnapshotSanitizerTests {
         #expect(sanitized.visibleText.isEmpty)
     }
 
+    @Test func filtersMessagesChromeAndKeepsTranscript() {
+        let sanitizer = SnapshotSanitizer()
+        let snapshot = WindowSnapshot(
+            bundleId: "com.apple.MobileSMS",
+            appName: "Messages",
+            windowTitle: "Josh Earle",
+            url: nil,
+            visibleText: """
+            Josh Earle
+            Search
+            Messages
+            Sounds good, I'll send it tonight.
+            Perfect, thanks.
+            compose
+            Start FaceTime
+            Message
+            """,
+            source: "accessibility"
+        )
+
+        let sanitized = sanitizer.sanitize(snapshot)
+
+        #expect(sanitized.windowTitle == "Josh Earle")
+        #expect(sanitized.visibleText == "Sounds good, I'll send it tonight.\nPerfect, thanks.")
+    }
+
+    @Test func fallsBackToMessagesParticipantWhenWindowTitleIsGeneric() {
+        let sanitizer = SnapshotSanitizer()
+        let snapshot = WindowSnapshot(
+            bundleId: "com.apple.MobileSMS",
+            appName: "Messages",
+            windowTitle: "Messages",
+            url: nil,
+            visibleText: """
+            Josh Earle
+            Search
+            Messages
+            Can you review this before 5?
+            Yep, I'll take a look.
+            """,
+            source: "accessibility"
+        )
+
+        let sanitized = sanitizer.sanitize(snapshot)
+
+        #expect(sanitized.windowTitle == "Josh Earle")
+        #expect(sanitized.visibleText == "Can you review this before 5?\nYep, I'll take a look.")
+    }
+
     @Test func fallsBackToMeaningfulVisibleTextWhenWindowTitleIsMissing() {
         let sanitizer = SnapshotSanitizer()
         let snapshot = WindowSnapshot(

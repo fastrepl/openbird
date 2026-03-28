@@ -32,9 +32,9 @@ public struct AccessibilitySnapshotter {
             ?? bundleID
         let url = browserURLResolver.currentURL(for: bundleID, windowTitle: windowTitle)
             ?? stringAttribute("AXURL", on: focusedWindow)
-        let windowText = collectVisibleText(from: focusedWindow, depth: 0, remainingNodes: 120, remainingCharacters: 2500)
+        let windowText = collectVisibleText(from: focusedWindow, depth: 0, remainingNodes: 220, remainingCharacters: 4000)
         let focusedElementText = copyElementAttribute(axApplication, attribute: kAXFocusedUIElementAttribute)
-            .map { collectVisibleText(from: $0, depth: 0, remainingNodes: 40, remainingCharacters: 800) }
+            .map { collectVisibleText(from: $0, depth: 0, remainingNodes: 60, remainingCharacters: 1200) }
             ?? ""
         let visibleText = mergeTextFragments([windowText, focusedElementText])
 
@@ -66,7 +66,7 @@ public struct AccessibilitySnapshotter {
         remainingNodes: Int,
         remainingCharacters: Int
     ) -> String {
-        guard depth < 7, remainingNodes > 0, remainingCharacters > 0 else { return "" }
+        guard depth < 9, remainingNodes > 0, remainingCharacters > 0 else { return "" }
 
         let role = stringAttribute(kAXRoleAttribute, on: element) ?? ""
         if role.localizedCaseInsensitiveContains("secure") {
@@ -92,9 +92,11 @@ public struct AccessibilitySnapshotter {
         }
 
         let children = prioritizedChildren(for: element)
-        let childBudget = max(1, remainingNodes / max(children.count, 1))
-        let charBudget = max(80, remainingCharacters / max(children.count + 1, 1))
-        for child in children.prefix(min(20, remainingNodes)) {
+        let childCount = max(children.count, 1)
+        let preferredChildCount = min(12, childCount)
+        let childBudget = max(4, remainingNodes / preferredChildCount)
+        let charBudget = max(160, remainingCharacters / preferredChildCount)
+        for child in children.prefix(min(preferredChildCount, remainingNodes)) {
             let childText = collectVisibleText(
                 from: child,
                 depth: depth + 1,
@@ -163,7 +165,27 @@ public struct AccessibilitySnapshotter {
 
     private func prioritizedChildren(for element: AXUIElement) -> [AXUIElement] {
         copyChildren(for: element).sorted { lhs, rhs in
-            childPriority(for: lhs) > childPriority(for: rhs)
+            let lhsRole = stringAttribute(kAXRoleAttribute, on: lhs) ?? ""
+            let rhsRole = stringAttribute(kAXRoleAttribute, on: rhs) ?? ""
+            let lhsPriority = childPriority(for: lhsRole)
+            let rhsPriority = childPriority(for: rhsRole)
+            if lhsPriority != rhsPriority {
+                return lhsPriority > rhsPriority
+            }
+
+            let lhsArea = elementArea(for: lhs)
+            let rhsArea = elementArea(for: rhs)
+            if lhsArea != rhsArea {
+                return lhsArea > rhsArea
+            }
+
+            let lhsX = elementOriginX(for: lhs)
+            let rhsX = elementOriginX(for: rhs)
+            if lhsX != rhsX {
+                return lhsX > rhsX
+            }
+
+            return lhsRole < rhsRole
         }
     }
 
@@ -188,15 +210,75 @@ public struct AccessibilitySnapshotter {
         blockedRoles.contains(role) == false
     }
 
-    private func childPriority(for element: AXUIElement) -> Int {
-        let role = stringAttribute(kAXRoleAttribute, on: element) ?? ""
-        if preferredContentRoles.contains(role) {
+    private func childPriority(for role: String) -> Int {
+        if primaryContentRoles.contains(role) {
+            return 4
+        }
+        if secondaryContentRoles.contains(role) {
             return 3
+        }
+        if role == "AXTextField" {
+            return 1
         }
         if blockedRoles.contains(role) {
             return 0
         }
-        return 1
+        return 2
+    }
+
+    private func elementArea(for element: AXUIElement) -> CGFloat {
+        guard let size = cgSizeAttribute(kAXSizeAttribute, on: element) else {
+            return 0
+        }
+        return size.width * size.height
+    }
+
+    private func elementOriginX(for element: AXUIElement) -> CGFloat {
+        cgPointAttribute(kAXPositionAttribute, on: element)?.x ?? 0
+    }
+
+    private func cgPointAttribute(_ attribute: String, on element: AXUIElement) -> CGPoint? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        guard result == .success,
+              let axValue = value,
+              CFGetTypeID(axValue) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+
+        let pointValue = unsafeDowncast(axValue, to: AXValue.self)
+        guard AXValueGetType(pointValue) == .cgPoint else {
+            return nil
+        }
+
+        var point = CGPoint.zero
+        guard AXValueGetValue(pointValue, .cgPoint, &point) else {
+            return nil
+        }
+        return point
+    }
+
+    private func cgSizeAttribute(_ attribute: String, on element: AXUIElement) -> CGSize? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+        guard result == .success,
+              let axValue = value,
+              CFGetTypeID(axValue) == AXValueGetTypeID()
+        else {
+            return nil
+        }
+
+        let sizeValue = unsafeDowncast(axValue, to: AXValue.self)
+        guard AXValueGetType(sizeValue) == .cgSize else {
+            return nil
+        }
+
+        var size = CGSize.zero
+        guard AXValueGetValue(sizeValue, .cgSize, &size) else {
+            return nil
+        }
+        return size
     }
 }
 
@@ -226,11 +308,10 @@ private let blockedRoles: Set<String> = [
     "AXWindow",
 ]
 
-private let preferredContentRoles: Set<String> = [
+private let primaryContentRoles: Set<String> = [
     "AXBrowser",
     "AXCell",
     "AXDocument",
-    "AXGroup",
     "AXHeading",
     "AXLayoutArea",
     "AXList",
@@ -241,6 +322,10 @@ private let preferredContentRoles: Set<String> = [
     "AXStaticText",
     "AXTable",
     "AXTextArea",
-    "AXTextField",
     "AXWebArea",
+]
+
+private let secondaryContentRoles: Set<String> = [
+    "AXGroup",
+    "AXSplitGroup",
 ]
