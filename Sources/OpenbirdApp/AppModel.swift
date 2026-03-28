@@ -142,7 +142,7 @@ final class AppModel: ObservableObject {
     }
 
     var activeProvider: ProviderConfig? {
-        providerConfigs.first { $0.id == settings.activeProviderID && $0.isEnabled }
+        ProviderSelection.resolve(configs: providerConfigs, settings: settings)
     }
 
     var selectedProvider: ProviderConfig? {

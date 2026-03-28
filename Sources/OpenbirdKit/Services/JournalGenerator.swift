@@ -91,15 +91,9 @@ public actor JournalGenerator {
     }
 
     private func activeProviderIfAvailable(id: String?) async throws -> ProviderConfig? {
-        let configs = try await store.loadProviderConfigs().filter(\.isEnabled)
-        if let id {
-            return configs.first { $0.id == id }
-        }
         let settings = try await store.loadSettings()
-        if let activeID = settings.activeProviderID {
-            return configs.first { $0.id == activeID }
-        }
-        return configs.first
+        let configs = try await store.loadProviderConfigs()
+        return ProviderSelection.resolve(configs: configs, settings: settings, preferredID: id)
     }
 
     private func buildSections(from events: [GroupedActivityEvent]) -> [PreparedSection] {

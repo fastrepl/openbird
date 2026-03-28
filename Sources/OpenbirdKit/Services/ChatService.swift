@@ -22,8 +22,11 @@ public actor ChatService {
 
     public func answer(_ query: ChatQuery) async throws -> ChatMessage {
         let settings = try await store.loadSettings()
-        let providerConfig = try await store.loadProviderConfigs()
-            .first(where: { $0.id == settings.activeProviderID && $0.isEnabled })
+        let providerConfigs = try await store.loadProviderConfigs()
+        let providerConfig = ProviderSelection.resolve(
+            configs: providerConfigs,
+            settings: settings
+        )
         let relevantEvents = try await retrievalService.search(
             query: query.question,
             range: query.dateRange,
