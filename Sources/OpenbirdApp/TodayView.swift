@@ -3,7 +3,7 @@ import OpenbirdKit
 
 struct TodayView: View {
     @ObservedObject var model: AppModel
-    @State private var timelineItems: [TimelineItem] = []
+    @State private var timelineContent: TimelineContent = .empty
     @State private var isPreparingTimeline = false
     @State private var isChatExpanded = false
     @FocusState private var focusedField: TodayChatDock.FocusField?
@@ -36,10 +36,10 @@ struct TodayView: View {
                         SetupChecklistView(model: model)
                     }
 
-                    if isPreparingTimeline && timelineItems.isEmpty {
+                    if isPreparingTimeline && timelineContent.isEmpty {
                         ProgressView("Loading timeline…")
                             .frame(maxWidth: .infinity, minHeight: 280)
-                    } else if timelineItems.isEmpty {
+                    } else if timelineContent.isEmpty {
                         ContentUnavailableView(
                             "No activity yet",
                             systemImage: "clock.badge.questionmark",
@@ -47,7 +47,7 @@ struct TodayView: View {
                         )
                         .frame(maxWidth: .infinity, minHeight: 280)
                     } else {
-                        timelineCard
+                        timelineView
                     }
                 }
                 .padding(.bottom, chatClearance)
@@ -132,9 +132,72 @@ struct TodayView: View {
         }
     }
 
-    private var timelineCard: some View {
+    @ViewBuilder
+    private var timelineView: some View {
+        switch timelineContent {
+        case .empty:
+            EmptyView()
+        case .journal(let document, let refreshedAt, let recentItems):
+            journalTimeline(document: document, refreshedAt: refreshedAt, recentItems: recentItems)
+        case .raw(let items):
+            timelineCard(items: items)
+        }
+    }
+
+    private func journalTimeline(
+        document: JournalMarkdownDocument,
+        refreshedAt: Date,
+        recentItems: [TimelineItem]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 0) {
+                if document.leadingBlocks.isEmpty == false {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(Array(document.leadingBlocks.enumerated()), id: \.offset) { _, block in
+                            JournalMarkdownBlockView(block: block)
+                        }
+                    }
+                    .padding(24)
+
+                    if document.sections.isEmpty == false {
+                        Divider()
+                    }
+                }
+
+                ForEach(Array(document.sections.enumerated()), id: \.element.id) { index, section in
+                    if index > 0 {
+                        Divider()
+                    }
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(section.title)
+                            .font(.headline)
+
+                        ForEach(Array(section.blocks.enumerated()), id: \.offset) { _, block in
+                            JournalMarkdownBlockView(block: block)
+                        }
+                    }
+                    .padding(24)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 24))
+
+            if recentItems.isEmpty == false {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Recent Activity")
+                        .font(.headline)
+                    Text("Summary last refreshed at \(OpenbirdDateFormatting.timeString(for: refreshedAt)). Newer captured activity is shown below.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    timelineCard(items: recentItems)
+                }
+            }
+        }
+    }
+
+    private func timelineCard(items: [TimelineItem]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(timelineItems.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 if index > 0 {
                     Divider()
                 }
@@ -252,60 +315,77 @@ struct TodayView: View {
 
     @MainActor
     private func prepareTimeline() async {
-        let journalSections = model.todayJournal?.sections ?? []
+        let journal = model.todayJournal
         let rawEvents = model.rawEvents
         let installedApplications = model.installedApplications
 
         isPreparingTimeline = true
 
         let preparationTask = Task.detached(priority: .userInitiated) {
-            Self.buildTimelineItems(
-                journalSections: journalSections,
+            Self.buildTimelineContent(
+                journal: journal,
                 rawEvents: rawEvents,
                 installedApplications: installedApplications
             )
         }
-        let items = await preparationTask.value
+        let content = await preparationTask.value
 
         guard Task.isCancelled == false else {
             return
         }
 
-        timelineItems = items
+        timelineContent = content
         isPreparingTimeline = false
     }
 
+    nonisolated private static func buildTimelineContent(
+        journal: DailyJournal?,
+        rawEvents: [ActivityEvent],
+        installedApplications: [InstalledApplication]
+    ) -> TimelineContent {
+        let rawItems = buildTimelineItems(
+            rawEvents: rawEvents,
+            installedApplications: installedApplications
+        )
+
+        guard let journal else {
+            return rawItems.isEmpty ? .empty : .raw(rawItems)
+        }
+
+        let document = JournalMarkdownParser.parse(journal.markdown)
+        let hasSummaryContent = document.leadingBlocks.isEmpty == false || document.sections.isEmpty == false
+        guard hasSummaryContent else {
+            return rawItems.isEmpty ? .empty : .raw(rawItems)
+        }
+
+        let hasNewerActivity = rawEvents.contains {
+            $0.isExcluded == false && $0.endedAt.timeIntervalSince(journal.updatedAt) > 10 * 60
+        }
+        let recentItems: [TimelineItem]
+        if hasNewerActivity {
+            recentItems = buildTimelineItems(
+                rawEvents: rawEvents.filter { $0.endedAt > journal.updatedAt },
+                installedApplications: installedApplications
+            )
+        } else {
+            recentItems = []
+        }
+
+        return .journal(
+            document: document,
+            refreshedAt: journal.updatedAt,
+            recentItems: recentItems
+        )
+    }
+
     nonisolated private static func buildTimelineItems(
-        journalSections: [JournalSection],
         rawEvents: [ActivityEvent],
         installedApplications: [InstalledApplication]
     ) -> [TimelineItem] {
-        let meaningfulRawEvents = rawEvents.filter { ActivityEvidencePreprocessor.isMeaningful($0) }
         let groupedRawEvents = ActivityEvidencePreprocessor.groupedMeaningfulEvents(from: rawEvents)
         let applicationsByBundleID = Dictionary(uniqueKeysWithValues: installedApplications.map {
             ($0.bundleID.lowercased(), $0)
         })
-
-        if journalSections.isEmpty == false {
-            let eventsByID = Dictionary(uniqueKeysWithValues: meaningfulRawEvents.map { ($0.id, $0) })
-
-            return journalSections.map { section in
-                let representativeEvent = section.sourceEventIDs.lazy.compactMap { eventsByID[$0] }.first
-                let bundlePath = representativeEvent.flatMap { event in
-                    applicationsByBundleID[event.bundleId.lowercased()]?.bundlePath
-                }
-
-                return TimelineItem(
-                    id: section.id,
-                    timeRange: section.timeRange,
-                    title: section.heading,
-                    bullets: section.bullets,
-                    bundleId: representativeEvent?.bundleId,
-                    bundlePath: bundlePath,
-                    appName: representativeEvent?.appName ?? section.heading
-                )
-            }
-        }
 
         return groupedRawEvents
             .filter { $0.isExcluded == false }
@@ -334,6 +414,23 @@ struct TodayView: View {
     }
 }
 
+private enum TimelineContent: Sendable {
+    case empty
+    case journal(document: JournalMarkdownDocument, refreshedAt: Date, recentItems: [TimelineItem])
+    case raw([TimelineItem])
+
+    var isEmpty: Bool {
+        switch self {
+        case .empty:
+            return true
+        case .journal(let document, _, let recentItems):
+            return (document.leadingBlocks.isEmpty && document.sections.isEmpty) && recentItems.isEmpty
+        case .raw(let items):
+            return items.isEmpty
+        }
+    }
+}
+
 private struct TimelineItem: Identifiable, Sendable {
     let id: String
     let timeRange: String
@@ -349,4 +446,67 @@ private struct TimelinePreparationKey: Equatable {
     let rawEventCount: Int
     let rawEventLastID: String?
     let installedApplicationCount: Int
+}
+
+private struct JournalMarkdownBlockView: View {
+    let block: JournalMarkdownBlock
+
+    var body: some View {
+        switch block {
+        case .paragraph(let text):
+            Text(text)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        case .bulletList(let items):
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(items, id: \.self) { item in
+                    Text("• \(item)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        case .table(let table):
+            JournalMarkdownTableView(table: table)
+        }
+    }
+}
+
+private struct JournalMarkdownTableView: View {
+    let table: JournalMarkdownTable
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row(table.headers, isHeader: true)
+
+            ForEach(Array(table.rows.enumerated()), id: \.offset) { index, values in
+                Divider()
+                row(values, isHeader: false)
+                    .background(index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.03))
+            }
+        }
+        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45))
+        }
+    }
+
+    private func row(_ values: [String], isHeader: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+                Text(value)
+                    .font(isHeader ? .subheadline.weight(.semibold) : .subheadline)
+                    .foregroundStyle(isHeader ? .primary : .secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(isHeader ? Color.primary.opacity(0.04) : Color.clear)
+    }
 }
