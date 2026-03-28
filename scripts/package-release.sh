@@ -27,6 +27,7 @@ chmod +x "${MACOS_DIR}/OpenbirdApp"
 "$(dirname "$0")/build-app-icon.sh" "${RESOURCES_DIR}/Openbird.icns"
 
 sed \
+  -e "s/__APP_NAME__/Openbird/g" \
   -e "s/__BUNDLE_IDENTIFIER__/${BUNDLE_ID}/g" \
   -e "s/__VERSION__/${VERSION}/g" \
   "$PLIST_TEMPLATE" > "${CONTENTS_DIR}/Info.plist"

@@ -8,7 +8,7 @@ if [[ $# -gt 1 ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_DIR="${1:-${ROOT_DIR}/.build/Openbird.app}"
+APP_DIR="${1:-${ROOT_DIR}/.build/Openbird Dev.app}"
 APP_DIR="${APP_DIR%/}"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
@@ -32,6 +32,7 @@ install -m 755 "${BUILD_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
 "${ROOT_DIR}/scripts/build-app-icon.sh" "${RESOURCES_DIR}/Openbird.icns"
 
 sed \
+  -e "s/__APP_NAME__/Openbird Dev/g" \
   -e "s/__BUNDLE_IDENTIFIER__/com.computelesscomputer.openbird.dev/g" \
   -e "s/__VERSION__/0.0.0/g" \
   "${PLIST_TEMPLATE}" > "${TMP_PLIST}"
