@@ -50,6 +50,8 @@ final class AppModel: ObservableObject {
     private let retentionService: RetentionService
     private let collectorRuntime: CollectorRuntime
     private let collectorOwnerID: String
+    private var providerConnectionTask: Task<Void, Never>?
+    private var providerConnectionRequestID = UUID()
 
     init() {
         do {
@@ -80,6 +82,7 @@ final class AppModel: ObservableObject {
     }
 
     deinit {
+        providerConnectionTask?.cancel()
         collectorRuntime.stop()
     }
 
@@ -282,6 +285,7 @@ final class AppModel: ObservableObject {
     }
 
     func saveEditingProvider() {
+        cancelPendingProviderConnectionCheck()
         Task {
             do {
                 var provider = sanitizedProviderConfig(editingProvider)
@@ -301,33 +305,35 @@ final class AppModel: ObservableObject {
     }
 
     func checkProviderConnection() {
-        let config = sanitizedProviderConfig(editingProvider)
-        providerStatusMessage = "Checking \(config.name)…"
-        availableProviderModels = []
-        Task {
-            do {
-                let provider = ProviderFactory.makeProvider(for: config)
-                let models = try await provider.listModels()
-                availableProviderModels = models
-                var updated = config
-                if ProviderConnectionAdvisor.shouldReplaceChatModel(updated.chatModel),
-                   let suggestedChatModel = ProviderConnectionAdvisor.suggestedChatModel(from: models) {
-                    updated.chatModel = suggestedChatModel
-                }
-                if ProviderConnectionAdvisor.shouldReplaceEmbeddingModel(updated.embeddingModel),
-                   let suggestedEmbeddingModel = ProviderConnectionAdvisor.suggestedEmbeddingModel(from: models) {
-                    updated.embeddingModel = suggestedEmbeddingModel
-                }
-                editingProvider = updated
+        startProviderConnectionCheck(for: sanitizedProviderConfig(editingProvider))
+    }
 
-                if models.isEmpty {
-                    providerStatusMessage = "Connection successful."
-                } else {
-                    providerStatusMessage = "Connection successful. Found \(models.count) model\(models.count == 1 ? "" : "s")."
-                }
+    func scheduleAutomaticProviderConnectionCheckIfNeeded() {
+        let config = sanitizedProviderConfig(editingProvider)
+        cancelPendingProviderConnectionCheck()
+        clearProviderConnectionResult()
+
+        guard shouldAutomaticallyCheckProviderConnection(for: config) else {
+            return
+        }
+
+        let requestID = UUID()
+        providerConnectionRequestID = requestID
+        providerConnectionTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(600))
             } catch {
-                providerStatusMessage = "Connection failed: \(error.localizedDescription)"
+                return
             }
+
+            guard let self else {
+                return
+            }
+
+            await self.performProviderConnectionCheck(
+                using: config,
+                requestID: requestID
+            )
         }
     }
 
@@ -344,8 +350,7 @@ final class AppModel: ObservableObject {
             editingProvider = ProviderConfig.defaultPreset(for: kind)
         }
 
-        providerStatusMessage = ""
-        availableProviderModels = []
+        scheduleAutomaticProviderConnectionCheckIfNeeded()
     }
 
     private func sanitizedProviderConfig(_ config: ProviderConfig) -> ProviderConfig {
@@ -361,6 +366,91 @@ final class AppModel: ObservableObject {
         }
 
         return sanitized
+    }
+
+    private func startProviderConnectionCheck(for config: ProviderConfig) {
+        cancelPendingProviderConnectionCheck()
+        availableProviderModels = []
+
+        let requestID = UUID()
+        providerConnectionRequestID = requestID
+        providerConnectionTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            await self.performProviderConnectionCheck(
+                using: config,
+                requestID: requestID
+            )
+        }
+    }
+
+    private func performProviderConnectionCheck(
+        using config: ProviderConfig,
+        requestID: UUID
+    ) async {
+        guard providerConnectionRequestID == requestID else {
+            return
+        }
+
+        providerStatusMessage = "Checking \(config.name)…"
+
+        do {
+            let provider = ProviderFactory.makeProvider(for: config)
+            let models = try await provider.listModels()
+
+            guard Task.isCancelled == false, providerConnectionRequestID == requestID else {
+                return
+            }
+
+            availableProviderModels = models
+
+            var updated = sanitizedProviderConfig(editingProvider)
+            if ProviderConnectionAdvisor.shouldReplaceChatModel(updated.chatModel),
+               let suggestedChatModel = ProviderConnectionAdvisor.suggestedChatModel(from: models) {
+                updated.chatModel = suggestedChatModel
+            }
+            if ProviderConnectionAdvisor.shouldReplaceEmbeddingModel(updated.embeddingModel),
+               let suggestedEmbeddingModel = ProviderConnectionAdvisor.suggestedEmbeddingModel(from: models) {
+                updated.embeddingModel = suggestedEmbeddingModel
+            }
+            editingProvider = updated
+
+            if models.isEmpty {
+                providerStatusMessage = "Connection successful."
+            } else {
+                providerStatusMessage = "Connection successful. Found \(models.count) model\(models.count == 1 ? "" : "s")."
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            guard providerConnectionRequestID == requestID else {
+                return
+            }
+            providerStatusMessage = "Connection failed: \(error.localizedDescription)"
+        }
+
+        providerConnectionTask = nil
+    }
+
+    private func shouldAutomaticallyCheckProviderConnection(for config: ProviderConfig) -> Bool {
+        guard config.kind.showsAPIKeyField else {
+            return false
+        }
+
+        return config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private func clearProviderConnectionResult() {
+        availableProviderModels = []
+        providerStatusMessage = ""
+    }
+
+    private func cancelPendingProviderConnectionCheck() {
+        providerConnectionTask?.cancel()
+        providerConnectionTask = nil
+        providerConnectionRequestID = UUID()
     }
 
     func installedApplicationName(for bundleID: String) -> String? {

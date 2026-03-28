@@ -92,6 +92,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .onAppear {
+            model.scheduleAutomaticProviderConnectionCheckIfNeeded()
+        }
+        .onChange(of: model.editingProvider.apiKey) { _, _ in
+            model.scheduleAutomaticProviderConnectionCheckIfNeeded()
+        }
     }
 
     private var providerDescription: String? {
