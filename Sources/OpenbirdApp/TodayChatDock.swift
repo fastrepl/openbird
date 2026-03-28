@@ -10,7 +10,7 @@ struct TodayChatDock: View {
     @Binding var isExpanded: Bool
     var focusedField: FocusState<FocusField?>.Binding
 
-    private let contentWidth: CGFloat = 860
+    private let contentWidth: CGFloat = 540
     private let bottomAnchor = "today-chat-bottom-anchor"
     private let transcriptHeight: CGFloat = 300
 
@@ -97,6 +97,7 @@ struct TodayChatDock: View {
 
 private struct ChatMessageRow: View {
     let message: ChatMessage
+    private let messageWidth: CGFloat = 420
 
     private var isUser: Bool {
         message.role == .user
@@ -142,7 +143,7 @@ private struct ChatMessageRow: View {
             Text(message.content)
                 .textSelection(.enabled)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: messageWidth, alignment: .leading)
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .background(Color.accentColor.opacity(0.13), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -230,6 +231,8 @@ private struct ChatComposer: View {
 }
 
 private struct EmptyChatState: View {
+    private let contentWidth: CGFloat = 420
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Ask Openbird about your day")
@@ -238,6 +241,6 @@ private struct EmptyChatState: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: contentWidth, alignment: .leading)
     }
 }
