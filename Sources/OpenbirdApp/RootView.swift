@@ -107,11 +107,16 @@ private struct CaptureToolbarButton: View {
         }
     }
 
+    private var actionTitle: String {
+        model.settings.capturePaused ? "Resume Capture" : "Pause Capture"
+    }
+
     private var buttonTitle: String {
-        if isHovering {
-            return model.settings.capturePaused ? "Resume Capture" : "Pause Capture"
-        }
-        return model.captureStatusLabel
+        isHovering ? actionTitle : model.captureStatusLabel
+    }
+
+    private var hoverSymbolName: String {
+        model.settings.capturePaused ? "play.fill" : "pause.fill"
     }
 
     var body: some View {
@@ -119,10 +124,24 @@ private struct CaptureToolbarButton: View {
             model.toggleCapturePaused()
         } label: {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                Text(buttonTitle)
+                ZStack {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+                        .opacity(isHovering ? 0 : 1)
+                    Image(systemName: hoverSymbolName)
+                        .font(.system(size: 10, weight: .semibold))
+                        .opacity(isHovering ? 1 : 0)
+                }
+                .frame(width: 10, height: 10)
+
+                ZStack(alignment: .leading) {
+                    Text(model.captureStatusLabel)
+                        .hidden()
+                    Text(actionTitle)
+                        .hidden()
+                    Text(buttonTitle)
+                }
             }
         }
         .help("\(model.captureStatusLabel)\n\(model.captureStatusDetail)")
