@@ -12,12 +12,14 @@ APP_DIR="${1:-${ROOT_DIR}/.build/Openbird.app}"
 APP_DIR="${APP_DIR%/}"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
+RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 (
   cd "${ROOT_DIR}"
   swift build
 )
 BUILD_DIR="$(cd "${ROOT_DIR}" && swift build --show-bin-path)"
 PLIST_TEMPLATE="${ROOT_DIR}/packaging/Openbird-Info.plist.template"
+ICON_PATH="${ROOT_DIR}/packaging/Openbird.icns"
 ENTITLEMENTS="${ROOT_DIR}/packaging/Openbird.entitlements"
 SIGNING_IDENTITY="${OPENBIRD_SIGNING_IDENTITY:--}"
 PLIST_PATH="${CONTENTS_DIR}/Info.plist"
@@ -25,9 +27,10 @@ TMP_PLIST="$(mktemp)"
 
 trap 'rm -f "${TMP_PLIST}"' EXIT
 
-mkdir -p "${MACOS_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 install -m 755 "${BUILD_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
+install -m 644 "${ICON_PATH}" "${RESOURCES_DIR}/Openbird.icns"
 
 sed \
   -e "s/__BUNDLE_IDENTIFIER__/com.computelesscomputer.openbird.dev/g" \
