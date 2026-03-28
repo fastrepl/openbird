@@ -79,7 +79,7 @@ struct TodayView: View {
 
     private func summaryHeader(_ journal: DailyJournal) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Daily Summary")
+            Text("Activity Review")
                 .font(.system(size: 30, weight: .semibold))
 
             HStack(spacing: 10) {
@@ -103,21 +103,32 @@ struct TodayView: View {
     }
 
     private func summaryCard(_ journal: DailyJournal) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if journal.sections.isEmpty {
-                Text(journal.markdown)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
+        let document = JournalMarkdownParser.parse(journal.markdown)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            if document.leadingBlocks.isEmpty, document.sections.isEmpty {
+                markdownText(journal.markdown, font: .body)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                VStack(alignment: .leading, spacing: 18) {
-                    ForEach(Array(journal.sections.enumerated()), id: \.element.id) { index, section in
-                        timelineRow(
-                            section,
-                            event: representativeEvent(for: section),
-                            showsConnector: index < journal.sections.count - 1
-                        )
+                VStack(alignment: .leading, spacing: 24) {
+                    ForEach(Array(document.leadingBlocks.enumerated()), id: \.offset) { _, block in
+                        markdownBlock(block)
+                    }
+
+                    ForEach(Array(document.sections.enumerated()), id: \.element.id) { index, section in
+                        if index > 0 {
+                            Divider()
+                        }
+
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text(section.title)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(.primary)
+
+                            ForEach(Array(section.blocks.enumerated()), id: \.offset) { _, block in
+                                markdownBlock(block)
+                            }
+                        }
                     }
                 }
             }
@@ -173,88 +184,70 @@ struct TodayView: View {
         let sourceEventIDs = Set(section.sourceEventIDs)
         return model.rawEvents.first { sourceEventIDs.contains($0.id) }
     }
-    
-    private func timelineRow(_ section: JournalSection, event: ActivityEvent?, showsConnector: Bool) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(spacing: 0) {
-                Circle()
-                    .fill(Color.accentColor)
-                    .frame(width: 10, height: 10)
 
-                if showsConnector {
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.18))
-                        .frame(width: 2)
-                        .frame(maxHeight: .infinity)
-                        .padding(.top, 6)
+    @ViewBuilder
+    private func markdownBlock(_ block: JournalMarkdownBlock) -> some View {
+        switch block {
+        case .paragraph(let text):
+            markdownText(text, font: .body)
+                .fixedSize(horizontal: false, vertical: true)
+        case .bulletList(let items):
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text("•")
+                            .font(.body.weight(.semibold))
+                        markdownText(item, font: .body)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
-            .frame(width: 10)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(section.timeRange)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(section.heading)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                if let appName = event?.appName, appName.normalizedComparisonKey != section.heading.normalizedComparisonKey {
-                    Text(appName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                ForEach(summaryHighlights(for: section, event: event), id: \.self) { highlight in
-                    Text(highlight)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, showsConnector ? 10 : 0)
+        case .table(let table):
+            markdownTable(table)
         }
+    }
+
+    private func markdownText(_ text: String, font: Font) -> some View {
+        Group {
+            if let attributed = try? AttributedString(
+                markdown: text,
+                options: AttributedString.MarkdownParsingOptions(
+                    interpretedSyntax: .inlineOnlyPreservingWhitespace
+                )
+            ) {
+                Text(attributed)
+            } else {
+                Text(text)
+            }
+        }
+        .font(font)
+        .foregroundStyle(.primary)
+        .textSelection(.enabled)
+    }
+
+    private func markdownTable(_ table: JournalMarkdownTable) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 12) {
+            GridRow {
+                ForEach(Array(table.headers.enumerated()), id: \.offset) { _, header in
+                    markdownText(header, font: .subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            Divider()
+                .gridCellColumns(table.headers.count)
+
+            ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                        markdownText(cell, font: .body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func summaryHighlights(for section: JournalSection, event: ActivityEvent?) -> [String] {
-        let excluded = Set(
-            [section.heading, event?.appName]
-                .compactMap { $0?.normalizedComparisonKey }
-        )
-        var pieces: [String] = []
-
-        for bullet in section.bullets {
-            let segments = bullet.split(separator: "•")
-            for segment in segments {
-                let piece = segment.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard piece.isEmpty == false else { continue }
-                guard excluded.contains(piece.normalizedComparisonKey) == false else { continue }
-                guard piece.hasPrefix("http") == false else { continue }
-                pieces.append(piece)
-            }
-        }
-
-        return Array(pieces.deduplicatedByNormalizedText().prefix(2))
-    }
-}
-
-private extension Array where Element == String {
-    func deduplicatedByNormalizedText() -> [String] {
-        var seen = Set<String>()
-        return filter { value in
-            seen.insert(value.normalizedComparisonKey).inserted
-        }
-    }
-}
-
-private extension String {
-    var normalizedComparisonKey: String {
-        lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { $0.isEmpty == false }
-            .joined(separator: " ")
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
     }
 }

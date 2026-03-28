@@ -12,6 +12,7 @@ public actor JournalGenerator {
         let events = try await store.loadActivityEvents(in: dayRange)
         let trimmedEvents = Array(events.prefix(request.maxSourceEvents))
         let sections = buildSections(from: trimmedEvents)
+        let eventsByID = Dictionary(uniqueKeysWithValues: trimmedEvents.map { ($0.id, $0) })
         let heuristicMarkdown = renderMarkdown(for: request.date, sections: sections, events: trimmedEvents)
 
         let providerConfig = try await activeProviderIfAvailable(id: request.providerID)
@@ -20,17 +21,19 @@ public actor JournalGenerator {
             do {
                 let provider = ProviderFactory.makeProvider(for: providerConfig)
                 let prompt = """
-                You are writing a polished daily summary from local computer activity logs.
+                You are writing a useful daily activity review from local computer activity logs.
                 Write for the person who lived the day.
 
                 Requirements:
                 - Return markdown only.
                 - Do not include a document title or repeat the date as a top heading.
-                - Start with a short 1 sentence overview at most.
-                - Then produce 3-6 titled sections in chronological order using the provided time ranges.
-                - Each section should have 1-3 concise bullets.
-                - Do not write one long narrative paragraph for the whole day.
-                - Leave a blank line between the overview, each section heading, and each bullet list.
+                - Start with a short framing sentence only if it adds value.
+                - Then write 4-8 chronological sections using markdown `##` headings.
+                - Each section heading should combine the approximate time or time range with the activity, for example `## ~3:15 PM - 4:15 PM - Char Dev Sprint`.
+                - Under each heading, write 1 short paragraph that explains what happened, with concrete nouns and outcomes.
+                - Add bullet lists only when they improve clarity, such as decisions, people, deliverables, or candidate lists.
+                - Use a markdown table when the evidence clearly contains a compact status list, comparison, or set of PRs.
+                - Merge or omit low-signal noise instead of narrating every app switch.
                 - Synthesize the evidence instead of echoing it verbatim.
                 - Prefer meaningful work descriptions over app chrome, repeated browser controls, toolbar labels, or duplicated URLs.
                 - Mention apps, repos, people, channels, or pages only when they help identify the work.
@@ -39,7 +42,7 @@ public actor JournalGenerator {
                 Day: \(OpenbirdDateFormatting.weekdayFormatter.string(from: request.date))
 
                 Evidence:
-                \(sections.map(sectionPrompt).joined(separator: "\n\n"))
+                \(sections.map { sectionPrompt($0, eventsByID: eventsByID) }.joined(separator: "\n\n"))
                 """
                 let response = try await provider.chat(
                     request: ProviderChatRequest(
@@ -116,8 +119,8 @@ public actor JournalGenerator {
         if let detailTitle = event.detailTitle {
             pieces.append(detailTitle)
         }
-        if let url = event.url, url.isEmpty == false {
-            pieces.append(url)
+        if let urlSummary = summarizedURL(from: event.url) {
+            pieces.append(urlSummary)
         }
         if event.excerpt.isEmpty == false {
             pieces.append(event.excerpt)
@@ -125,11 +128,42 @@ public actor JournalGenerator {
         return pieces.deduplicatedByNormalizedText().joined(separator: " • ")
     }
 
-    private func sectionPrompt(_ section: JournalSection) -> String {
+    private func sectionPrompt(
+        _ section: JournalSection,
+        eventsByID: [String: ActivityEvent]
+    ) -> String {
+        let evidence = section.sourceEventIDs
+            .compactMap { eventsByID[$0] }
+            .map(eventPrompt)
+            .joined(separator: "\n")
+
+        return """
+        Focus window: \(section.timeRange)
+        Likely topic: \(section.heading)
+        Evidence:
+        \(evidence.isEmpty ? "- No detailed evidence available." : evidence)
         """
-        Section: \(section.timeRange) • \(section.heading)
-        \(section.bullets.map { "- \($0)" }.joined(separator: "\n"))
-        """
+    }
+
+    private func eventPrompt(_ event: ActivityEvent) -> String {
+        var pieces = [
+            "\(OpenbirdDateFormatting.timeString(for: event.startedAt))-\(OpenbirdDateFormatting.timeString(for: event.endedAt))",
+            event.appName,
+        ]
+
+        if let detailTitle = event.detailTitle {
+            pieces.append(detailTitle)
+        }
+
+        if let urlSummary = summarizedURL(from: event.url) {
+            pieces.append(urlSummary)
+        }
+
+        if event.excerpt.isEmpty == false {
+            pieces.append(event.excerpt)
+        }
+
+        return "- " + pieces.joined(separator: " | ")
     }
 
     private func renderMarkdown(for date: Date, sections: [JournalSection], events: [ActivityEvent]) -> String {
@@ -165,6 +199,30 @@ public actor JournalGenerator {
             counts[title, default: 0] += score
         }
         return ranked.max(by: { $0.value < $1.value })?.key ?? appName
+    }
+
+    private func summarizedURL(from urlString: String?) -> String? {
+        guard let urlString,
+              urlString.isEmpty == false
+        else {
+            return nil
+        }
+
+        guard let components = URLComponents(string: urlString),
+              let host = components.host
+        else {
+            return String(urlString.prefix(80))
+        }
+
+        let normalizedHost = host.replacingOccurrences(of: "www.", with: "")
+        let path = components.path == "/" ? "" : components.path
+        let summary = normalizedHost + path
+
+        if summary.isEmpty {
+            return normalizedHost
+        }
+
+        return summary.count > 80 ? String(summary.prefix(80)) + "…" : summary
     }
 }
 
