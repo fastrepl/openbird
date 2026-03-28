@@ -106,7 +106,7 @@ private struct CaptureToolbarButton: View {
         if model.isCollectorHeartbeatFresh == false { return .secondary }
         switch model.settings.collectorStatus {
         case "running":
-            return .blue
+            return .accentColor
         case "error":
             return .red
         default:
@@ -126,22 +126,55 @@ private struct CaptureToolbarButton: View {
         model.settings.capturePaused ? "play.fill" : "pause.fill"
     }
 
+    private var statusSymbolName: String {
+        if model.settings.capturePaused { return "pause.fill" }
+        if model.isCollectorActiveElsewhere { return "desktopcomputer" }
+        if model.isCollectorHeartbeatFresh == false { return "stop.fill" }
+        switch model.settings.collectorStatus {
+        case "running":
+            return "waveform"
+        case "error":
+            return "exclamationmark"
+        default:
+            return "stop.fill"
+        }
+    }
+
+    private var symbolName: String {
+        isHovering ? hoverSymbolName : statusSymbolName
+    }
+
+    private var symbolColor: Color {
+        isHovering ? .primary : statusColor
+    }
+
+    private var iconBackgroundColor: Color {
+        let opacity = isHovering ? 0.18 : 0.12
+        return statusColor.opacity(opacity)
+    }
+
+    private var buttonBackgroundColor: Color {
+        isHovering ? statusColor.opacity(0.1) : Color(nsColor: .controlBackgroundColor)
+    }
+
+    private var buttonBorderColor: Color {
+        isHovering ? statusColor.opacity(0.24) : Color(nsColor: .separatorColor).opacity(0.35)
+    }
+
     var body: some View {
         Button {
             model.toggleCapturePaused()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ZStack {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(statusColor)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(iconBackgroundColor)
+                    Image(systemName: symbolName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(symbolColor)
                         .symbolEffect(.pulse, isActive: isActivelyCapturing && isHovering == false)
-                        .opacity(isHovering ? 0 : 1)
-                    Image(systemName: hoverSymbolName)
-                        .font(.system(size: 10, weight: .semibold))
-                        .opacity(isHovering ? 1 : 0)
                 }
-                .frame(width: 10, height: 10)
+                .frame(width: 22, height: 22)
 
                 ZStack(alignment: .leading) {
                     Text(model.captureStatusLabel)
@@ -149,9 +182,19 @@ private struct CaptureToolbarButton: View {
                     Text(actionTitle)
                         .hidden()
                     Text(buttonTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.primary)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(buttonBackgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(buttonBorderColor, lineWidth: 1)
+            }
         }
+        .buttonStyle(.plain)
         .help("\(model.captureStatusLabel)\n\(model.captureStatusDetail)")
         .onHover { hovering in
             isHovering = hovering
@@ -161,6 +204,7 @@ private struct CaptureToolbarButton: View {
 
 private struct UpdateToolbarButton: View {
     @ObservedObject var model: AppModel
+    @State private var isHovering = false
 
     private var title: String {
         if model.isInstallingUpdate {
@@ -182,16 +226,74 @@ private struct UpdateToolbarButton: View {
         return "Check for a newer Openbird release."
     }
 
+    private var tintColor: Color {
+        model.availableUpdate == nil ? .secondary : .accentColor
+    }
+
+    private var borderColor: Color {
+        if model.availableUpdate != nil {
+            return tintColor.opacity(isHovering ? 0.3 : 0.24)
+        }
+        return isHovering ? tintColor.opacity(0.22) : Color(nsColor: .separatorColor).opacity(0.35)
+    }
+
+    private var backgroundColor: Color {
+        if model.availableUpdate != nil {
+            return tintColor.opacity(isHovering ? 0.18 : 0.14)
+        }
+        return isHovering ? tintColor.opacity(0.08) : Color(nsColor: .controlBackgroundColor)
+    }
+
+    private var symbolName: String {
+        if model.availableUpdate != nil {
+            return "arrow.down"
+        }
+        return "arrow.clockwise"
+    }
+
     var body: some View {
-        Button(title) {
+        Button {
             if model.availableUpdate != nil {
                 model.installAvailableUpdate()
             } else {
                 model.checkForUpdates()
             }
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(tintColor.opacity(model.availableUpdate != nil ? 0.18 : 0.12))
+                    if model.isInstallingUpdate || model.isCheckingForUpdates {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: symbolName)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(tintColor)
+                    }
+                }
+                .frame(width: 22, height: 22)
+
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(borderColor, lineWidth: 1)
+            }
         }
+        .buttonStyle(.plain)
         .disabled(model.isInstallingUpdate || model.isCheckingForUpdates || (model.availableUpdate == nil && model.appVersion == nil))
         .help(helpText)
+        .onHover { hovering in
+            isHovering = hovering
+        }
     }
 }
 
