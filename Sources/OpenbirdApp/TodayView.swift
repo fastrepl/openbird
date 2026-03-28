@@ -5,6 +5,7 @@ struct TodayView: View {
     @ObservedObject var model: AppModel
     @State private var timelineContent: TimelineContent = .empty
     @State private var isPreparingTimeline = false
+    @State private var timelinePreparationStatus: TimelinePreparationStatus?
     @State private var isChatExpanded = false
     @FocusState private var focusedField: TodayChatDock.FocusField?
     private let collapsedChatClearance: CGFloat = 92
@@ -36,8 +37,8 @@ struct TodayView: View {
                         SetupChecklistView(model: model)
                     }
 
-                    if isPreparingTimeline && timelineContent.isEmpty {
-                        ProgressView("Loading timeline…")
+                    if let loadingStatus = activeLoadingStatus, timelineContent.isEmpty {
+                        LoadingStatusCard(status: loadingStatus)
                             .frame(maxWidth: .infinity, minHeight: 280)
                     } else if timelineContent.isEmpty {
                         ContentUnavailableView(
@@ -244,6 +245,23 @@ struct TodayView: View {
         )
     }
 
+    private var activeLoadingStatus: LoadingDisplayStatus? {
+        if let modelStatus = model.dayLoadStatus {
+            return LoadingDisplayStatus(
+                step: modelStatus.step,
+                totalSteps: modelStatus.totalSteps,
+                title: modelStatus.title,
+                detail: modelStatus.detail
+            )
+        }
+
+        guard isPreparingTimeline, let timelinePreparationStatus else {
+            return nil
+        }
+
+        return timelinePreparationStatus.displayStatus
+    }
+
     private func handleChatFocusRequestIfNeeded() {
         guard model.shouldFocusChatComposer else {
             return
@@ -320,61 +338,86 @@ struct TodayView: View {
         let installedApplications = model.installedApplications
 
         isPreparingTimeline = true
+        timelinePreparationStatus = .groupingActivity
+        defer {
+            isPreparingTimeline = false
+            timelinePreparationStatus = nil
+        }
 
-        let preparationTask = Task.detached(priority: .userInitiated) {
-            Self.buildTimelineContent(
-                journal: journal,
+        let rawItems = await Task.detached(priority: .userInitiated) {
+            Self.buildTimelineItems(
                 rawEvents: rawEvents,
                 installedApplications: installedApplications
             )
-        }
-        let content = await preparationTask.value
+        }.value
 
         guard Task.isCancelled == false else {
             return
         }
 
-        timelineContent = content
-        isPreparingTimeline = false
-    }
-
-    nonisolated private static func buildTimelineContent(
-        journal: DailyJournal?,
-        rawEvents: [ActivityEvent],
-        installedApplications: [InstalledApplication]
-    ) -> TimelineContent {
-        let rawItems = buildTimelineItems(
-            rawEvents: rawEvents,
-            installedApplications: installedApplications
-        )
-
         guard let journal else {
-            return rawItems.isEmpty ? .empty : .raw(rawItems)
+            timelineContent = rawItems.isEmpty ? .empty : .raw(rawItems)
+            return
         }
 
-        let document = JournalMarkdownParser.parse(journal.markdown)
-        let hasSummaryContent = document.leadingBlocks.isEmpty == false || document.sections.isEmpty == false
-        guard hasSummaryContent else {
-            return rawItems.isEmpty ? .empty : .raw(rawItems)
-        }
-
-        let hasNewerActivity = rawEvents.contains {
-            $0.isExcluded == false && $0.endedAt.timeIntervalSince(journal.updatedAt) > 10 * 60
-        }
-        let recentItems: [TimelineItem]
-        if hasNewerActivity {
-            recentItems = buildTimelineItems(
-                rawEvents: rawEvents.filter { $0.endedAt > journal.updatedAt },
-                installedApplications: installedApplications
+        timelinePreparationStatus = .parsingJournal
+        let parsedJournal = await Task.detached(priority: .userInitiated) {
+            Self.parseJournalContent(
+                journal: journal,
+                rawEvents: rawEvents,
+                rawItems: rawItems
             )
+        }.value
+
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        guard parsedJournal.hasSummaryContent else {
+            timelineContent = rawItems.isEmpty ? .empty : .raw(rawItems)
+            return
+        }
+
+        let recentItems: [TimelineItem]
+        if parsedJournal.hasNewerActivity {
+            timelinePreparationStatus = .buildingRecentActivity
+            recentItems = await Task.detached(priority: .userInitiated) {
+                Self.buildTimelineItems(
+                    rawEvents: rawEvents.filter { $0.endedAt > journal.updatedAt },
+                    installedApplications: installedApplications
+                )
+            }.value
         } else {
             recentItems = []
         }
 
-        return .journal(
-            document: document,
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        timelinePreparationStatus = .finalizing
+        timelineContent = .journal(
+            document: parsedJournal.document,
             refreshedAt: journal.updatedAt,
             recentItems: recentItems
+        )
+    }
+
+    nonisolated private static func parseJournalContent(
+        journal: DailyJournal,
+        rawEvents: [ActivityEvent],
+        rawItems: [TimelineItem]
+    ) -> ParsedJournalContent {
+        let document = JournalMarkdownParser.parse(journal.markdown)
+        let hasSummaryContent = document.leadingBlocks.isEmpty == false || document.sections.isEmpty == false
+        let hasNewerActivity = hasSummaryContent && rawItems.isEmpty == false && rawEvents.contains {
+            $0.isExcluded == false && $0.endedAt.timeIntervalSince(journal.updatedAt) > 10 * 60
+        }
+
+        return ParsedJournalContent(
+            document: document,
+            hasSummaryContent: hasSummaryContent,
+            hasNewerActivity: hasNewerActivity
         )
     }
 
@@ -427,6 +470,118 @@ private enum TimelineContent: Sendable {
             return (document.leadingBlocks.isEmpty && document.sections.isEmpty) && recentItems.isEmpty
         case .raw(let items):
             return items.isEmpty
+        }
+    }
+}
+
+private struct LoadingDisplayStatus: Equatable {
+    let step: Int
+    let totalSteps: Int
+    let title: String
+    let detail: String
+}
+
+private struct ParsedJournalContent: Sendable {
+    let document: JournalMarkdownDocument
+    let hasSummaryContent: Bool
+    let hasNewerActivity: Bool
+}
+
+private enum TimelinePreparationStatus {
+    case groupingActivity
+    case parsingJournal
+    case buildingRecentActivity
+    case finalizing
+
+    var displayStatus: LoadingDisplayStatus {
+        switch self {
+        case .groupingActivity:
+            return LoadingDisplayStatus(
+                step: 1,
+                totalSteps: 4,
+                title: "Grouping captured activity",
+                detail: "Collapsing raw window snapshots into longer work blocks so the timeline is readable."
+            )
+        case .parsingJournal:
+            return LoadingDisplayStatus(
+                step: 2,
+                totalSteps: 4,
+                title: "Parsing the saved journal",
+                detail: "Reading the cached markdown summary and checking whether newer activity arrived after it."
+            )
+        case .buildingRecentActivity:
+            return LoadingDisplayStatus(
+                step: 3,
+                totalSteps: 4,
+                title: "Building recent activity",
+                detail: "Extracting the events captured since the last refresh so the latest work still shows up."
+            )
+        case .finalizing:
+            return LoadingDisplayStatus(
+                step: 4,
+                totalSteps: 4,
+                title: "Rendering the timeline",
+                detail: "Matching app metadata, icons, and summary sections before the timeline is shown."
+            )
+        }
+    }
+}
+
+private struct LoadingStatusCard: View {
+    let status: LoadingDisplayStatus
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ProgressView()
+                .controlSize(.large)
+
+            VStack(spacing: 8) {
+                Text(status.title)
+                    .font(.headline)
+
+                StreamingStatusText(text: status.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+
+            ProgressView(value: Double(status.step), total: Double(status.totalSteps))
+                .frame(width: 260)
+
+            Text("Step \(status.step) of \(status.totalSteps)")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 32)
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 24))
+    }
+}
+
+private struct StreamingStatusText: View {
+    let text: String
+    @State private var displayedText = ""
+
+    var body: some View {
+        Text(displayedText)
+            .task(id: text) {
+                await streamText(text)
+            }
+    }
+
+    @MainActor
+    private func streamText(_ text: String) async {
+        displayedText = ""
+
+        for character in text {
+            guard Task.isCancelled == false else {
+                return
+            }
+
+            displayedText.append(character)
+            try? await Task.sleep(for: .milliseconds(12))
         }
     }
 }

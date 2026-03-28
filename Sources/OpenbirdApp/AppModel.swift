@@ -4,6 +4,13 @@ import OpenbirdKit
 
 @MainActor
 final class AppModel: ObservableObject {
+    struct DayLoadStatus: Equatable {
+        let step: Int
+        let totalSteps: Int
+        let title: String
+        let detail: String
+    }
+
     private static let automaticUpdateCheckInterval: TimeInterval = 60 * 60 * 12
     private static let dismissedUpdateVersionKey = "openbird.dismissedUpdateVersion"
     private static let lastUpdateCheckDateKey = "openbird.lastUpdateCheckDate"
@@ -32,6 +39,7 @@ final class AppModel: ObservableObject {
     @Published var isShowingRawLogInspector = false
     @Published private(set) var shouldFocusChatComposer = false
     @Published private(set) var accessibilityTrusted = false
+    @Published private(set) var dayLoadStatus: DayLoadStatus?
 
     let permissionsService = PermissionsService()
     private let store: OpenbirdStore
@@ -249,10 +257,19 @@ final class AppModel: ObservableObject {
     func refresh() async {
         refreshAccessibilityPermissionState()
         isBusy = true
-        defer { isBusy = false }
+        defer {
+            isBusy = false
+            dayLoadStatus = nil
+        }
 
         do {
             let previousProviderID = editingProvider.id
+            dayLoadStatus = Self.makeDayLoadStatus(
+                step: 1,
+                totalSteps: 5,
+                title: "Loading Openbird state",
+                detail: "Reading your saved settings, providers, and exclusions from the local store."
+            )
             settings = try await store.loadSettings()
             providerConfigs = try await store.loadProviderConfigs()
             exclusions = try await store.loadExclusions()
@@ -268,14 +285,52 @@ final class AppModel: ObservableObject {
             }
 
             let dayRange = Calendar.current.dayRange(for: selectedDay)
+            dayLoadStatus = Self.makeDayLoadStatus(
+                step: 2,
+                totalSteps: 5,
+                title: "Reading captured activity",
+                detail: "Querying the local timeline database for raw events recorded on the selected day."
+            )
             rawEvents = try await store.loadActivityEvents(in: dayRange, includeExcluded: true)
+            dayLoadStatus = Self.makeDayLoadStatus(
+                step: 3,
+                totalSteps: 5,
+                title: "Loading saved summary",
+                detail: "Checking whether Openbird already has a journal summary cached for this day."
+            )
             todayJournal = try await store.loadJournal(for: OpenbirdDateFormatting.dayString(for: selectedDay))
+            dayLoadStatus = Self.makeDayLoadStatus(
+                step: 4,
+                totalSteps: 5,
+                title: "Restoring chat thread",
+                detail: "Finding the conversation that belongs to this day so follow-up questions stay anchored."
+            )
             let thread = try await chatService.ensureThread(for: OpenbirdDateFormatting.dayString(for: selectedDay))
             chatThread = thread
+            dayLoadStatus = Self.makeDayLoadStatus(
+                step: 5,
+                totalSteps: 5,
+                title: "Loading prior answers",
+                detail: "Pulling earlier messages into memory so the dock can answer with full context."
+            )
             chatMessages = try await store.loadMessages(threadID: thread.id)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private static func makeDayLoadStatus(
+        step: Int,
+        totalSteps: Int,
+        title: String,
+        detail: String
+    ) -> DayLoadStatus {
+        DayLoadStatus(
+            step: step,
+            totalSteps: totalSteps,
+            title: title,
+            detail: detail
+        )
     }
 
     func requestAccessibilityPermission() {
