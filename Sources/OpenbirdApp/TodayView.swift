@@ -32,7 +32,7 @@ struct TodayView: View {
                             SetupChecklistView(model: model)
                         }
                         summaryHeader(journal)
-                        summaryCard(journal.markdown)
+                        summaryCard(journal)
 
                         if journal.sections.isEmpty == false {
                             DisclosureGroup(isExpanded: $isShowingSupportingEvidence) {
@@ -102,9 +102,25 @@ struct TodayView: View {
         }
     }
 
-    private func summaryCard(_ markdown: String) -> some View {
+    private func summaryCard(_ journal: DailyJournal) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            SummaryMarkdownView(markdown: markdown)
+            if journal.sections.isEmpty {
+                Text(journal.markdown)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(Array(journal.sections.enumerated()), id: \.element.id) { index, section in
+                        timelineRow(
+                            section,
+                            event: representativeEvent(for: section),
+                            showsConnector: index < journal.sections.count - 1
+                        )
+                    }
+                }
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -157,154 +173,88 @@ struct TodayView: View {
         let sourceEventIDs = Set(section.sourceEventIDs)
         return model.rawEvents.first { sourceEventIDs.contains($0.id) }
     }
-}
+    
+    private func timelineRow(_ section: JournalSection, event: ActivityEvent?, showsConnector: Bool) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 10, height: 10)
 
-private struct SummaryMarkdownView: View {
-    private let blocks: [SummaryMarkdownBlock]
-
-    init(markdown: String) {
-        blocks = SummaryMarkdownParser.parse(markdown)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ForEach(blocks.indices, id: \.self) { index in
-                blockView(blocks[index])
+                if showsConnector {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.18))
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                        .padding(.top, 6)
+                }
             }
-        }
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
+            .frame(width: 10)
 
-    @ViewBuilder
-    private func blockView(_ block: SummaryMarkdownBlock) -> some View {
-        switch block {
-        case .heading(let level, let text):
-            inlineMarkdownText(text)
-                .font(level == 1 ? .system(size: 24, weight: .semibold) : .title3.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .paragraph(let text):
-            inlineMarkdownText(text)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .lineSpacing(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .list(let items):
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(items.indices, id: \.self) { index in
-                    HStack(alignment: .top, spacing: 10) {
-                        Circle()
-                            .fill(Color.secondary)
-                            .frame(width: 6, height: 6)
-                            .padding(.top, 7)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(section.timeRange)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
-                        inlineMarkdownText(items[index])
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .lineSpacing(4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                Text(section.heading)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                if let appName = event?.appName, appName.normalizedComparisonKey != section.heading.normalizedComparisonKey {
+                    Text(appName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(summaryHighlights(for: section, event: event), id: \.self) { highlight in
+                    Text(highlight)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, showsConnector ? 10 : 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func inlineMarkdownText(_ markdown: String) -> Text {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        if let attributed = try? AttributedString(markdown: markdown, options: options) {
-            return Text(attributed)
+    private func summaryHighlights(for section: JournalSection, event: ActivityEvent?) -> [String] {
+        let excluded = Set(
+            [section.heading, event?.appName]
+                .compactMap { $0?.normalizedComparisonKey }
+        )
+        var pieces: [String] = []
+
+        for bullet in section.bullets {
+            let segments = bullet.split(separator: "•")
+            for segment in segments {
+                let piece = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard piece.isEmpty == false else { continue }
+                guard excluded.contains(piece.normalizedComparisonKey) == false else { continue }
+                guard piece.hasPrefix("http") == false else { continue }
+                pieces.append(piece)
+            }
         }
-        return Text(markdown)
+
+        return Array(pieces.deduplicatedByNormalizedText().prefix(2))
     }
 }
 
-private enum SummaryMarkdownBlock {
-    case heading(level: Int, text: String)
-    case paragraph(String)
-    case list([String])
+private extension Array where Element == String {
+    func deduplicatedByNormalizedText() -> [String] {
+        var seen = Set<String>()
+        return filter { value in
+            seen.insert(value.normalizedComparisonKey).inserted
+        }
+    }
 }
 
-private enum SummaryMarkdownParser {
-    static func parse(_ markdown: String) -> [SummaryMarkdownBlock] {
-        let normalized = markdown
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-
-        var blocks: [SummaryMarkdownBlock] = []
-        var index = 0
-
-        while index < lines.count {
-            let line = lines[index].trimmingCharacters(in: .whitespaces)
-            if line.isEmpty {
-                index += 1
-                continue
-            }
-
-            if let heading = heading(from: line) {
-                blocks.append(.heading(level: heading.level, text: heading.text))
-                index += 1
-                continue
-            }
-
-            if let item = listItem(from: line) {
-                var items = [item]
-                index += 1
-
-                while index < lines.count {
-                    let next = lines[index].trimmingCharacters(in: .whitespaces)
-                    guard let nextItem = listItem(from: next) else { break }
-                    items.append(nextItem)
-                    index += 1
-                }
-
-                blocks.append(.list(items))
-                continue
-            }
-
-            var paragraphLines = [line]
-            index += 1
-
-            while index < lines.count {
-                let next = lines[index].trimmingCharacters(in: .whitespaces)
-                if next.isEmpty || heading(from: next) != nil || listItem(from: next) != nil {
-                    break
-                }
-                paragraphLines.append(next)
-                index += 1
-            }
-
-            blocks.append(.paragraph(paragraphLines.joined(separator: " ")))
-        }
-
-        if blocks.count > 1,
-           let first = blocks.first,
-           case .heading(let level, _) = first,
-           level == 1 {
-            blocks.removeFirst()
-        }
-
-        return blocks.isEmpty ? [.paragraph(markdown)] : blocks
-    }
-
-    private static func heading(from line: String) -> (level: Int, text: String)? {
-        let level = line.prefix { $0 == "#" }.count
-        guard (1...3).contains(level) else { return nil }
-
-        let markerEnd = line.index(line.startIndex, offsetBy: level)
-        let content = line[markerEnd...].trimmingCharacters(in: .whitespaces)
-        guard content.isEmpty == false else { return nil }
-        return (level, content)
-    }
-
-    private static func listItem(from line: String) -> String? {
-        let markers = ["- ", "* "]
-        for marker in markers where line.hasPrefix(marker) {
-            let item = String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
-            return item.isEmpty ? nil : item
-        }
-        return nil
+private extension String {
+    var normalizedComparisonKey: String {
+        lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
     }
 }

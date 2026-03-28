@@ -26,9 +26,10 @@ public actor JournalGenerator {
                 Requirements:
                 - Return markdown only.
                 - Do not include a document title or repeat the date as a top heading.
-                - Start with a short 1-2 sentence overview.
-                - Then produce 3-6 titled sections in chronological order.
+                - Start with a short 1 sentence overview at most.
+                - Then produce 3-6 titled sections in chronological order using the provided time ranges.
                 - Each section should have 1-3 concise bullets.
+                - Do not write one long narrative paragraph for the whole day.
                 - Leave a blank line between the overview, each section heading, and each bullet list.
                 - Synthesize the evidence instead of echoing it verbatim.
                 - Prefer meaningful work descriptions over app chrome, repeated browser controls, toolbar labels, or duplicated URLs.
