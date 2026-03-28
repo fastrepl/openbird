@@ -104,9 +104,11 @@ struct SettingsView: View {
             model.scheduleAutomaticProviderConnectionCheckIfNeeded()
         }
         .onChange(of: model.editingProvider.apiKey) { _, _ in
+            model.scheduleAutomaticProviderSaveIfNeeded()
             model.scheduleAutomaticProviderConnectionCheckIfNeeded()
         }
         .onChange(of: model.editingProvider.baseURL) { _, _ in
+            model.scheduleAutomaticProviderSaveIfNeeded()
             model.scheduleAutomaticProviderConnectionCheckIfNeeded()
         }
     }

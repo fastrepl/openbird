@@ -158,4 +158,30 @@ struct OpenbirdStoreTests {
         #expect(settings.collectorOwnerName == nil)
         #expect(settings.collectorStatus == "stopped")
     }
+
+    @Test func savesSelectedProviderIDAlongsideProviderDrafts() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let provider = ProviderConfig(
+            name: ProviderKind.anthropic.defaultName,
+            kind: .anthropic,
+            baseURL: ProviderKind.anthropic.defaultBaseURL,
+            apiKey: "test-key",
+            isEnabled: true
+        )
+
+        try await store.saveProviderConfig(provider)
+
+        var settings = try await store.loadSettings()
+        settings.selectedProviderID = provider.id
+        try await store.saveSettings(settings)
+
+        let reloadedSettings = try await store.loadSettings()
+        let reloadedProviders = try await store.loadProviderConfigs()
+        let savedProvider = reloadedProviders.first { $0.id == provider.id }
+
+        #expect(reloadedSettings.selectedProviderID == provider.id)
+        #expect(savedProvider?.kind == .anthropic)
+        #expect(savedProvider?.apiKey == "test-key")
+    }
 }

@@ -4,6 +4,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var capturePaused: Bool
     public var retentionDays: Int
     public var activeProviderID: String?
+    public var selectedProviderID: String?
     public var lastCollectorHeartbeat: Date?
     public var collectorStatus: String
     public var collectorOwnerID: String?
@@ -13,6 +14,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         capturePaused: Bool = false,
         retentionDays: Int = 14,
         activeProviderID: String? = nil,
+        selectedProviderID: String? = nil,
         lastCollectorHeartbeat: Date? = nil,
         collectorStatus: String = "stopped",
         collectorOwnerID: String? = nil,
@@ -21,6 +23,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.capturePaused = capturePaused
         self.retentionDays = retentionDays
         self.activeProviderID = activeProviderID
+        self.selectedProviderID = selectedProviderID
         self.lastCollectorHeartbeat = lastCollectorHeartbeat
         self.collectorStatus = collectorStatus
         self.collectorOwnerID = collectorOwnerID

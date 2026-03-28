@@ -123,6 +123,7 @@ public final class SQLiteDatabase: @unchecked Sendable {
         settings.capturePaused = dict["capturePaused"] == "true"
         settings.retentionDays = Int(dict["retentionDays"] ?? "14") ?? 14
         settings.activeProviderID = normalizeOptionalSetting(dict["activeProviderID"])
+        settings.selectedProviderID = normalizeOptionalSetting(dict["selectedProviderID"])
         if let heartbeat = normalizeOptionalSetting(dict["lastCollectorHeartbeat"]), let timestamp = Double(heartbeat) {
             settings.lastCollectorHeartbeat = Date(timeIntervalSince1970: timestamp)
         }
@@ -137,6 +138,7 @@ public final class SQLiteDatabase: @unchecked Sendable {
             ("capturePaused", settings.capturePaused ? "true" : "false"),
             ("retentionDays", String(settings.retentionDays)),
             ("activeProviderID", settings.activeProviderID ?? ""),
+            ("selectedProviderID", settings.selectedProviderID ?? ""),
             ("lastCollectorHeartbeat", settings.lastCollectorHeartbeat.map { String($0.timeIntervalSince1970) } ?? ""),
             ("collectorStatus", settings.collectorStatus),
             ("collectorOwnerID", settings.collectorOwnerID ?? ""),

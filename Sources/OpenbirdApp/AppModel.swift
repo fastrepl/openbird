@@ -163,6 +163,10 @@ final class AppModel: ObservableObject {
         providerConfigs.first { $0.id == settings.activeProviderID && $0.isEnabled }
     }
 
+    var selectedProvider: ProviderConfig? {
+        providerConfigs.first { $0.id == settings.selectedProviderID }
+    }
+
     func providerName(for id: String?) -> String? {
         guard let id else { return nil }
         return providerConfigs.first { $0.id == id }?.name
@@ -270,7 +274,9 @@ final class AppModel: ObservableObject {
             settings = try await store.loadSettings()
             providerConfigs = try await store.loadProviderConfigs()
             exclusions = try await store.loadExclusions()
-            if let activeProvider {
+            if let selectedProvider {
+                editingProvider = selectedProvider
+            } else if let activeProvider {
                 editingProvider = activeProvider
             } else if let first = providerConfigs.first {
                 editingProvider = first
@@ -367,7 +373,6 @@ final class AppModel: ObservableObject {
 
     func scheduleAutomaticProviderConnectionCheckIfNeeded() {
         let config = sanitizedProviderConfig(editingProvider)
-        cancelPendingProviderSave()
         cancelPendingProviderConnectionCheck()
         clearProviderConnectionResult()
 
@@ -399,10 +404,6 @@ final class AppModel: ObservableObject {
         let provider = sanitizedProviderConfig(editingProvider)
         cancelPendingProviderSave()
 
-        guard canPersistProvider(provider, availableModels: availableProviderModels) else {
-            return
-        }
-
         providerSaveTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: .milliseconds(300))
@@ -414,7 +415,7 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            await self.persistProvider(provider, statusMessage: "Saved provider settings.")
+            await self.persistProvider(provider, activate: false)
         }
     }
 
@@ -431,6 +432,7 @@ final class AppModel: ObservableObject {
             editingProvider = ProviderConfig.defaultPreset(for: kind)
         }
 
+        scheduleAutomaticProviderSaveIfNeeded()
         scheduleAutomaticProviderConnectionCheckIfNeeded()
     }
 
@@ -449,7 +451,7 @@ final class AppModel: ObservableObject {
         return sanitized
     }
 
-    private func persistProvider(_ provider: ProviderConfig, statusMessage: String) async {
+    private func persistProvider(_ provider: ProviderConfig, activate: Bool, statusMessage: String? = nil) async {
         do {
             var savedProvider = provider
             savedProvider.updatedAt = Date()
@@ -457,7 +459,10 @@ final class AppModel: ObservableObject {
             try await store.saveProviderConfig(savedProvider)
 
             var updatedSettings = try await store.loadSettings()
-            updatedSettings.activeProviderID = savedProvider.id
+            updatedSettings.selectedProviderID = savedProvider.id
+            if activate {
+                updatedSettings.activeProviderID = savedProvider.id
+            }
             try await store.saveSettings(updatedSettings)
 
             settings = updatedSettings
@@ -467,7 +472,9 @@ final class AppModel: ObservableObject {
                 providerConfigs.append(savedProvider)
             }
             editingProvider = savedProvider
-            providerStatusMessage = statusMessage
+            if let statusMessage {
+                providerStatusMessage = statusMessage
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -511,6 +518,7 @@ final class AppModel: ObservableObject {
             if canPersistProvider(updated, availableModels: models) {
                 await persistProvider(
                     updated,
+                    activate: true,
                     statusMessage: connectionSuccessMessage(models: models, kind: updated.kind, saved: true)
                 )
             } else if models.isEmpty {
