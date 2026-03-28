@@ -113,8 +113,8 @@ public actor JournalGenerator {
 
     private func makeBullet(for event: ActivityEvent) -> String {
         var pieces = [event.appName]
-        if event.windowTitle.isEmpty == false && event.windowTitle.normalizedComparisonKey != event.appName.normalizedComparisonKey {
-            pieces.append(event.windowTitle)
+        if let detailTitle = event.detailTitle {
+            pieces.append(detailTitle)
         }
         if let url = event.url, url.isEmpty == false {
             pieces.append(url)

@@ -36,6 +36,23 @@ struct SnapshotSanitizerTests {
         #expect(sanitized.visibleText.isEmpty)
     }
 
+    @Test func removesGenericCodexVisibleText() {
+        let sanitizer = SnapshotSanitizer()
+        let snapshot = WindowSnapshot(
+            bundleId: "com.openai.codex",
+            appName: "Codex",
+            windowTitle: "Codex",
+            url: nil,
+            visibleText: "Codex",
+            source: "accessibility"
+        )
+
+        let sanitized = sanitizer.sanitize(snapshot)
+
+        #expect(sanitized.windowTitle == "Codex")
+        #expect(sanitized.visibleText.isEmpty)
+    }
+
     @Test func fallsBackToMeaningfulVisibleTextWhenWindowTitleIsMissing() {
         let sanitizer = SnapshotSanitizer()
         let snapshot = WindowSnapshot(

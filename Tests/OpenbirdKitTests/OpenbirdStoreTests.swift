@@ -63,6 +63,51 @@ struct OpenbirdStoreTests {
         #expect(results.first?.appName == "VS Code")
     }
 
+    @Test func mergesOverlappingEventsWithSameContentHash() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let now = Date()
+
+        try await store.saveActivityEvent(
+            ActivityEvent(
+                id: "event-a",
+                startedAt: now.addingTimeInterval(-120),
+                endedAt: now.addingTimeInterval(-60),
+                bundleId: "com.openai.codex",
+                appName: "Codex",
+                windowTitle: "Codex",
+                url: nil,
+                visibleText: "",
+                source: "workspace",
+                contentHash: "codex-hash",
+                isExcluded: false
+            )
+        )
+        try await store.saveActivityEvent(
+            ActivityEvent(
+                id: "event-b",
+                startedAt: now.addingTimeInterval(-90),
+                endedAt: now,
+                bundleId: "com.openai.codex",
+                appName: "Codex",
+                windowTitle: "Codex",
+                url: nil,
+                visibleText: "",
+                source: "accessibility",
+                contentHash: "codex-hash",
+                isExcluded: false
+            )
+        )
+
+        let events = try await store.loadActivityEvents(in: Calendar.current.dayRange(for: now))
+
+        #expect(events.count == 1)
+        #expect(events.first?.id == "event-a")
+        #expect(abs((events.first?.startedAt.timeIntervalSince1970 ?? 0) - now.addingTimeInterval(-120).timeIntervalSince1970) < 0.001)
+        #expect(abs((events.first?.endedAt.timeIntervalSince1970 ?? 0) - now.timeIntervalSince1970) < 0.001)
+        #expect(events.first?.source == "accessibility")
+    }
+
     @Test func collectorLeaseBlocksSecondOwnerUntilHeartbeatExpires() async throws {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
         let store = try OpenbirdStore(databaseURL: databaseURL)

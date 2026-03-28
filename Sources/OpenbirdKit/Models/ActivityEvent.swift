@@ -43,11 +43,36 @@ public struct ActivityEvent: Identifiable, Codable, Hashable, Sendable {
         windowTitle.isEmpty ? appName : windowTitle
     }
 
+    public var detailTitle: String? {
+        let trimmed = windowTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false,
+              trimmed.normalizedComparisonKey != appName.normalizedComparisonKey
+        else {
+            return nil
+        }
+        return trimmed
+    }
+
     public var excerpt: String {
-        visibleText
+        let collapsed = visibleText
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .prefix(180)
-            .description
+        let normalized = collapsed.normalizedComparisonKey
+        guard collapsed.isEmpty == false,
+              normalized != appName.normalizedComparisonKey,
+              normalized != windowTitle.normalizedComparisonKey
+        else {
+            return ""
+        }
+        return collapsed.prefix(180).description
+    }
+}
+
+private extension String {
+    var normalizedComparisonKey: String {
+        lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
     }
 }

@@ -273,40 +273,65 @@ public final class SQLiteDatabase: @unchecked Sendable {
     }
 
     public func saveActivityEvent(_ event: ActivityEvent) throws {
-        try execute(
-            """
-            INSERT OR REPLACE INTO activity_events
-            (id, started_at, ended_at, bundle_id, app_name, window_title, url, visible_text, source, content_hash, is_excluded)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """,
-            bindings: [
-                .text(event.id),
-                .double(event.startedAt.timeIntervalSince1970),
-                .double(event.endedAt.timeIntervalSince1970),
-                .text(event.bundleId),
-                .text(event.appName),
-                .text(event.windowTitle),
-                event.url.map(SQLiteValue.text) ?? .null,
-                .text(event.visibleText),
-                .text(event.source),
-                .text(event.contentHash),
-                .integer(event.isExcluded ? 1 : 0),
-            ]
-        )
-        try execute("DELETE FROM activity_events_fts WHERE id = ?;", bindings: [.text(event.id)])
-        try execute(
-            """
-            INSERT INTO activity_events_fts (id, app_name, window_title, url, visible_text)
-            VALUES (?, ?, ?, ?, ?);
-            """,
-            bindings: [
-                .text(event.id),
-                .text(event.appName),
-                .text(event.windowTitle),
-                event.url.map(SQLiteValue.text) ?? .text(""),
-                .text(event.visibleText),
-            ]
-        )
+        try withImmediateTransaction {
+            let overlappingDuplicates = try query(
+                """
+                SELECT * FROM activity_events
+                WHERE content_hash = ?
+                  AND is_excluded = ?
+                  AND started_at <= ?
+                  AND ended_at >= ?
+                ORDER BY started_at ASC, ended_at DESC;
+                """,
+                bindings: [
+                    .text(event.contentHash),
+                    .integer(event.isExcluded ? 1 : 0),
+                    .double(event.endedAt.timeIntervalSince1970),
+                    .double(event.startedAt.timeIntervalSince1970),
+                ]
+            ).map(ActivityEvent.init(row:))
+
+            let mergedEvent = mergeActivityEvent(event, with: overlappingDuplicates)
+            for duplicate in overlappingDuplicates where duplicate.id != mergedEvent.id {
+                try execute("DELETE FROM activity_events_fts WHERE id = ?;", bindings: [.text(duplicate.id)])
+                try execute("DELETE FROM activity_events WHERE id = ?;", bindings: [.text(duplicate.id)])
+            }
+
+            try execute(
+                """
+                INSERT OR REPLACE INTO activity_events
+                (id, started_at, ended_at, bundle_id, app_name, window_title, url, visible_text, source, content_hash, is_excluded)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                bindings: [
+                    .text(mergedEvent.id),
+                    .double(mergedEvent.startedAt.timeIntervalSince1970),
+                    .double(mergedEvent.endedAt.timeIntervalSince1970),
+                    .text(mergedEvent.bundleId),
+                    .text(mergedEvent.appName),
+                    .text(mergedEvent.windowTitle),
+                    mergedEvent.url.map(SQLiteValue.text) ?? .null,
+                    .text(mergedEvent.visibleText),
+                    .text(mergedEvent.source),
+                    .text(mergedEvent.contentHash),
+                    .integer(mergedEvent.isExcluded ? 1 : 0),
+                ]
+            )
+            try execute("DELETE FROM activity_events_fts WHERE id = ?;", bindings: [.text(mergedEvent.id)])
+            try execute(
+                """
+                INSERT INTO activity_events_fts (id, app_name, window_title, url, visible_text)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                bindings: [
+                    .text(mergedEvent.id),
+                    .text(mergedEvent.appName),
+                    .text(mergedEvent.windowTitle),
+                    mergedEvent.url.map(SQLiteValue.text) ?? .text(""),
+                    .text(mergedEvent.visibleText),
+                ]
+            )
+        }
     }
 
     public func loadActivityEvents(in range: ClosedRange<Date>, includeExcluded: Bool = false) throws -> [ActivityEvent] {
@@ -654,6 +679,21 @@ public final class SQLiteDatabase: @unchecked Sendable {
     private func normalizeOptionalSetting(_ value: String?) -> String? {
         guard let value, value.isEmpty == false else { return nil }
         return value
+    }
+
+    private func mergeActivityEvent(_ event: ActivityEvent, with duplicates: [ActivityEvent]) -> ActivityEvent {
+        guard let canonical = duplicates.first else {
+            return event
+        }
+
+        var merged = canonical
+        let overlappingEvents = duplicates + [event]
+        merged.startedAt = overlappingEvents.map(\.startedAt).min() ?? canonical.startedAt
+        merged.endedAt = overlappingEvents.map(\.endedAt).max() ?? canonical.endedAt
+        if overlappingEvents.contains(where: { $0.source == "accessibility" }) {
+            merged.source = "accessibility"
+        }
+        return merged
     }
 
     private func makeFTSQuery(from rawQuery: String) -> String? {

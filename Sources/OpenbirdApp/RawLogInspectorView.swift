@@ -25,14 +25,16 @@ struct RawLogInspectorView: View {
                         }
                         Text(event.appName)
                             .font(.headline)
-                        Text(event.displayTitle)
+                        if let detailTitle = event.detailTitle {
+                            Text(detailTitle)
+                        }
                         if let url = event.url {
                             Text(url)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if event.visibleText.isEmpty == false {
-                            Text(event.visibleText)
+                        if event.excerpt.isEmpty == false {
+                            Text(event.excerpt)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(4)
