@@ -171,11 +171,12 @@ public actor JournalGenerator {
             return "No activity captured yet for \(OpenbirdDateFormatting.weekdayFormatter.string(from: date))."
         }
 
+        let eventsByID = Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
         let appCount = Set(events.map(\.appName)).count
-        var markdown = "Captured \(sections.count) focus block\(sections.count == 1 ? "" : "s") across \(appCount) app\(appCount == 1 ? "" : "s") on \(OpenbirdDateFormatting.weekdayFormatter.string(from: date)).\n\n"
+        var markdown = "Stitched together from your local activity logs: \(sections.count) section\(sections.count == 1 ? "" : "s") across \(appCount) app\(appCount == 1 ? "" : "s") on \(OpenbirdDateFormatting.weekdayFormatter.string(from: date)).\n\n"
         for section in sections {
-            markdown += "## \(section.timeRange) — \(section.heading)\n\n"
-            markdown += section.bullets.map { "- \($0)" }.joined(separator: "\n")
+            markdown += "## \(sectionHeading(for: section, eventsByID: eventsByID))\n\n"
+            markdown += sectionNarrative(for: section, eventsByID: eventsByID)
             markdown += "\n\n"
         }
         return markdown.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -223,6 +224,90 @@ public actor JournalGenerator {
         }
 
         return summary.count > 80 ? String(summary.prefix(80)) + "…" : summary
+    }
+
+    private func sectionHeading(
+        for section: JournalSection,
+        eventsByID: [String: ActivityEvent]
+    ) -> String {
+        "\(section.timeRange) - \(displayTopic(for: section, eventsByID: eventsByID))"
+    }
+
+    private func sectionNarrative(
+        for section: JournalSection,
+        eventsByID: [String: ActivityEvent]
+    ) -> String {
+        let events = section.sourceEventIDs.compactMap { eventsByID[$0] }
+        let apps = Array(events.map(\.appName).deduplicatedByNormalizedText())
+        let topic = displayTopic(for: section, eventsByID: eventsByID)
+        let topicKey = topic.normalizedComparisonKey
+        let appKeys = Set(apps.map(\.normalizedComparisonKey))
+
+        var sentences: [String] = []
+        if appKeys.contains(topicKey) {
+            sentences.append("Spent this block in \(naturalLanguageList(apps)).")
+        } else if apps.isEmpty {
+            sentences.append("Spent this block on \(topic).")
+        } else {
+            sentences.append("Spent this block on \(topic) in \(naturalLanguageList(apps)).")
+        }
+
+        let highlights = sectionHighlights(for: section, events: events)
+        if highlights.isEmpty == false {
+            sentences.append("Main notes: \(highlights.joined(separator: "; ")).")
+        }
+
+        return sentences.joined(separator: " ")
+    }
+
+    private func displayTopic(
+        for section: JournalSection,
+        eventsByID: [String: ActivityEvent]
+    ) -> String {
+        let topic = section.heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard topic.isEmpty == false else {
+            return section.sourceEventIDs
+                .compactMap { eventsByID[$0]?.appName }
+                .first ?? "Activity"
+        }
+
+        return topic
+    }
+
+    private func sectionHighlights(
+        for section: JournalSection,
+        events: [ActivityEvent]
+    ) -> [String] {
+        let excluded = Set(
+            ([section.heading] + events.map(\.appName))
+                .map(\.normalizedComparisonKey)
+        )
+
+        var pieces: [String] = []
+        for bullet in section.bullets {
+            for segment in bullet.split(separator: "•") {
+                let piece = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard piece.isEmpty == false else { continue }
+                guard excluded.contains(piece.normalizedComparisonKey) == false else { continue }
+                pieces.append(piece)
+            }
+        }
+
+        return Array(pieces.deduplicatedByNormalizedText().prefix(3))
+    }
+
+    private func naturalLanguageList(_ values: [String]) -> String {
+        switch values.count {
+        case 0:
+            return "activity"
+        case 1:
+            return values[0]
+        case 2:
+            return "\(values[0]) and \(values[1])"
+        default:
+            let prefix = values.dropLast().joined(separator: ", ")
+            return "\(prefix), and \(values[values.count - 1])"
+        }
     }
 }
 
