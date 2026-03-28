@@ -4,6 +4,8 @@ import OpenbirdKit
 struct TodayView: View {
     @ObservedObject var model: AppModel
     @State private var isShowingSupportingEvidence = false
+    @State private var supportingEvidenceItems: [SupportingEvidenceItem] = []
+    @State private var isPreparingSupportingEvidence = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -36,9 +38,16 @@ struct TodayView: View {
 
                         if journal.sections.isEmpty == false {
                             DisclosureGroup(isExpanded: $isShowingSupportingEvidence) {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    ForEach(journal.sections) { section in
-                                        sectionCard(section)
+                                Group {
+                                    if isPreparingSupportingEvidence && supportingEvidenceItems.isEmpty {
+                                        ProgressView("Loading evidence…")
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    } else {
+                                        VStack(alignment: .leading, spacing: 14) {
+                                            ForEach(supportingEvidenceItems) { item in
+                                                sectionCard(item)
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(.top, 12)
@@ -75,6 +84,9 @@ struct TodayView: View {
         }
         .padding(28)
         .navigationTitle("Today")
+        .task(id: supportingEvidencePreparationKey) {
+            await prepareSupportingEvidence()
+        }
     }
 
     private func summaryHeader(_ journal: DailyJournal) -> some View {
@@ -153,21 +165,20 @@ struct TodayView: View {
         journal.providerID == nil ? Color.orange.opacity(0.16) : Color.blue.opacity(0.14)
     }
 
-    private func sectionCard(_ section: JournalSection) -> some View {
-        let event = representativeEvent(for: section)
-
+    private func sectionCard(_ item: SupportingEvidenceItem) -> some View {
         return HStack(alignment: .top, spacing: 12) {
             ActivityAppIcon(
-                bundleId: event?.bundleId,
-                appName: event?.appName ?? section.heading,
+                bundleId: item.bundleId,
+                bundlePath: item.bundlePath,
+                appName: item.appName,
                 size: 30
             )
             .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(section.timeRange) • \(section.heading)")
+                Text("\(item.timeRange) • \(item.heading)")
                     .font(.headline)
-                ForEach(section.bullets, id: \.self) { bullet in
+                ForEach(item.bullets, id: \.self) { bullet in
                     Text("• \(bullet)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -178,11 +189,6 @@ struct TodayView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
-    }
-
-    private func representativeEvent(for section: JournalSection) -> ActivityEvent? {
-        let sourceEventIDs = Set(section.sourceEventIDs)
-        return model.rawEvents.first { sourceEventIDs.contains($0.id) }
     }
 
     @ViewBuilder
@@ -250,4 +256,76 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 18))
     }
+
+    private var supportingEvidencePreparationKey: SupportingEvidencePreparationKey {
+        SupportingEvidencePreparationKey(
+            journalID: model.todayJournal?.id,
+            rawEventCount: model.rawEvents.count,
+            rawEventLastID: model.rawEvents.last?.id,
+            installedApplicationCount: model.installedApplications.count
+        )
+    }
+
+    @MainActor
+    private func prepareSupportingEvidence() async {
+        guard let journal = model.todayJournal else {
+            supportingEvidenceItems = []
+            isPreparingSupportingEvidence = false
+            return
+        }
+
+        let sections = journal.sections
+        let rawEvents = model.rawEvents
+        let installedApplications = model.installedApplications
+
+        isPreparingSupportingEvidence = true
+
+        let items = await Task.detached(priority: .userInitiated) {
+            let eventsByID = Dictionary(uniqueKeysWithValues: rawEvents.map { ($0.id, $0) })
+            let applicationsByBundleID = Dictionary(uniqueKeysWithValues: installedApplications.map {
+                ($0.bundleID.lowercased(), $0)
+            })
+
+            return sections.map { section in
+                let representativeEvent = section.sourceEventIDs.lazy.compactMap { eventsByID[$0] }.first
+                let bundlePath = representativeEvent.flatMap { event in
+                    applicationsByBundleID[event.bundleId.lowercased()]?.bundlePath
+                }
+
+                return SupportingEvidenceItem(
+                    id: section.id,
+                    heading: section.heading,
+                    timeRange: section.timeRange,
+                    bullets: section.bullets,
+                    bundleId: representativeEvent?.bundleId,
+                    bundlePath: bundlePath,
+                    appName: representativeEvent?.appName ?? section.heading
+                )
+            }
+        }.value
+
+        guard Task.isCancelled == false else {
+            return
+        }
+
+        supportingEvidenceItems = items
+        isPreparingSupportingEvidence = false
+    }
+}
+
+private struct SupportingEvidenceItem: Identifiable, Sendable {
+    let id: String
+    let heading: String
+    let timeRange: String
+    let bullets: [String]
+    let bundleId: String?
+    let bundlePath: String?
+    let appName: String
+}
+
+private struct SupportingEvidencePreparationKey: Equatable {
+    let journalID: String?
+    let rawEventCount: Int
+    let rawEventLastID: String?
+    let installedApplicationCount: Int
 }

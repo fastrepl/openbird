@@ -3,13 +3,14 @@ import SwiftUI
 
 struct ActivityAppIcon: View {
     let bundleId: String?
+    var bundlePath: String? = nil
     let appName: String
     var size: CGFloat = 28
 
     var body: some View {
         Group {
             if let bundleId,
-               let icon = ActivityAppIconCache.shared.icon(for: bundleId) {
+               let icon = ActivityAppIconCache.shared.icon(for: bundleId, bundlePath: bundlePath) {
                 Image(nsImage: icon)
                     .resizable()
                     .scaledToFit()
@@ -46,7 +47,7 @@ private final class ActivityAppIconCache {
     private let cache = NSCache<NSString, NSImage>()
     private var missingBundleIDs = Set<String>()
 
-    func icon(for bundleId: String) -> NSImage? {
+    func icon(for bundleId: String, bundlePath: String?) -> NSImage? {
         let key = bundleId as NSString
         if let cached = cache.object(forKey: key) {
             return cached
@@ -55,12 +56,17 @@ private final class ActivityAppIconCache {
             return nil
         }
 
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+        let resolvedBundlePath: String
+        if let bundlePath, bundlePath.isEmpty == false {
+            resolvedBundlePath = bundlePath
+        } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+            resolvedBundlePath = url.path
+        } else {
             missingBundleIDs.insert(bundleId)
             return nil
         }
 
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        let icon = NSWorkspace.shared.icon(forFile: resolvedBundlePath)
         cache.setObject(icon, forKey: key)
         return icon
     }
