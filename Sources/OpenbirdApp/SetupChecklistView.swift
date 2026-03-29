@@ -10,7 +10,7 @@ struct SetupChecklistView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Finish setup")
                     .font(.title2.weight(.semibold))
-                Text("Grant Accessibility access and connect a provider to start building your local activity journal.")
+                Text("Openbird starts in Today now. Turn on capture and connect a provider here when you are ready.")
                     .foregroundStyle(.secondary)
             }
 

@@ -102,20 +102,30 @@ private struct OpenbirdStatusMenuLabel: View {
     private let iconSize: CGFloat = 18
 
     var body: some View {
-        Image(nsImage: templateApplicationIcon)
-            .renderingMode(.template)
+        Image(nsImage: trayIcon)
             .resizable()
             .scaledToFit()
             .frame(width: iconSize, height: iconSize)
             .accessibilityLabel("Openbird")
     }
 
-    private var templateApplicationIcon: NSImage {
-        let icon = (NSApp.applicationIconImage?.copy() as? NSImage)
-            ?? NSImage(systemSymbolName: "bird", accessibilityDescription: "Openbird")
-            ?? NSImage()
+    private var trayIcon: NSImage {
+        let icon = trayResourceIcon() ?? fallbackIcon()
         icon.size = NSSize(width: iconSize, height: iconSize)
-        icon.isTemplate = true
         return icon
+    }
+
+    private func trayResourceIcon() -> NSImage? {
+        guard let url = Bundle.module.url(forResource: "tray", withExtension: "png"),
+              let icon = NSImage(contentsOf: url) else {
+            return nil
+        }
+
+        return icon
+    }
+
+    private func fallbackIcon() -> NSImage {
+        NSImage(systemSymbolName: "bird", accessibilityDescription: "Openbird")
+            ?? NSImage()
     }
 }

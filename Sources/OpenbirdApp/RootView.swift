@@ -10,12 +10,10 @@ struct RootView: View {
     @State private var dismissedGoogleDocsHintEventID: String?
 
     var body: some View {
-        content
+        TodayView(model: model)
         .toolbar {
-            if model.needsOnboarding == false {
-                ToolbarItem(placement: .automatic) {
-                    CaptureToolbarButton(model: model)
-                }
+            ToolbarItem(placement: .automatic) {
+                CaptureToolbarButton(model: model)
             }
             if model.availableUpdate != nil {
                 ToolbarItem(placement: .automatic) {
@@ -27,8 +25,7 @@ struct RootView: View {
             RawLogInspectorView(model: model)
         }
         .overlay(alignment: .top) {
-            if model.needsOnboarding == false,
-               let hint = visibleGoogleDocsCaptureHint {
+            if let hint = visibleGoogleDocsCaptureHint {
                 GoogleDocsCaptureNotification(
                     hint: hint,
                     dismiss: {
@@ -61,15 +58,6 @@ struct RootView: View {
             Text(model.errorMessage ?? "Unknown error")
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.9), value: visibleGoogleDocsCaptureHint?.eventID)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if model.needsOnboarding {
-            LandingPageView(model: model)
-        } else {
-            TodayView(model: model)
-        }
     }
 
     private var visibleGoogleDocsCaptureHint: GoogleDocsCaptureHint? {

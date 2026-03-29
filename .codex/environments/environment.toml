@@ -9,3 +9,11 @@ script = ""
 name = "Run"
 icon = "run"
 command = "./scripts/run-dev-app.sh \"$HOME/Applications/Openbird.app\""
+
+[[actions]]
+name = "Website"
+icon = "run"
+command = '''
+bun install
+bun run landing:dev
+'''

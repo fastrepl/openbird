@@ -27,7 +27,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "OpenbirdApp",
-            dependencies: ["OpenbirdKit"]
+            dependencies: ["OpenbirdKit"],
+            resources: [
+                .process("Resources/tray.png"),
+            ]
         ),
         .testTarget(
             name: "OpenbirdKitTests",
