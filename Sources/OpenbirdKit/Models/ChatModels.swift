@@ -71,19 +71,25 @@ public struct ChatQuery: Sendable {
     public var dateRange: ClosedRange<Date>
     public var appFilters: [String]
     public var topK: Int
+    public var userMessageID: String
+    public var assistantMessageID: String
 
     public init(
         threadID: String,
         question: String,
         dateRange: ClosedRange<Date>,
         appFilters: [String] = [],
-        topK: Int = 8
+        topK: Int = 8,
+        userMessageID: String = UUID().uuidString,
+        assistantMessageID: String = UUID().uuidString
     ) {
         self.threadID = threadID
         self.question = question
         self.dateRange = dateRange
         self.appFilters = appFilters
         self.topK = topK
+        self.userMessageID = userMessageID
+        self.assistantMessageID = assistantMessageID
     }
 }
 

@@ -86,8 +86,19 @@ public actor ChatService {
             answerText = heuristicAnswer(for: query.question, events: relevantEvents)
         }
 
-        let userMessage = ChatMessage(threadID: query.threadID, role: .user, content: query.question)
-        let assistantMessage = ChatMessage(threadID: query.threadID, role: .assistant, content: answerText, citations: citations)
+        let userMessage = ChatMessage(
+            id: query.userMessageID,
+            threadID: query.threadID,
+            role: .user,
+            content: query.question
+        )
+        let assistantMessage = ChatMessage(
+            id: query.assistantMessageID,
+            threadID: query.threadID,
+            role: .assistant,
+            content: answerText,
+            citations: citations
+        )
         try await store.saveMessage(userMessage)
         try await store.saveMessage(assistantMessage)
         return assistantMessage

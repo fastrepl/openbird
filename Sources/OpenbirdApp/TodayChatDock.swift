@@ -36,11 +36,11 @@ struct TodayChatDock: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if model.chatMessages.isEmpty {
+                    if model.displayedChatMessages.isEmpty {
                         EmptyChatState()
                             .frame(maxWidth: .infinity, minHeight: transcriptHeight, alignment: .leading)
                     } else {
-                        ForEach(model.chatMessages) { message in
+                        ForEach(model.displayedChatMessages) { message in
                             ChatMessageRow(message: message)
                         }
                     }
@@ -77,7 +77,7 @@ struct TodayChatDock: View {
             .onAppear {
                 scrollToBottom(using: proxy, animated: false)
             }
-            .onChange(of: model.chatMessages.last?.id) { _, _ in
+            .onChange(of: model.displayedChatMessages.last) { _, _ in
                 scrollToBottom(using: proxy)
             }
         }
@@ -98,7 +98,7 @@ struct TodayChatDock: View {
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy, animated: Bool = true) {
-        guard model.chatMessages.isEmpty == false else { return }
+        guard model.displayedChatMessages.isEmpty == false else { return }
         if animated {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo(bottomAnchor, anchor: .bottom)
@@ -110,11 +110,22 @@ struct TodayChatDock: View {
 }
 
 private struct ChatMessageRow: View {
-    let message: ChatMessage
+    let message: AppModel.ChatDisplayMessage
     private let messageWidth: CGFloat = 420
 
     private var isUser: Bool {
         message.role == .user
+    }
+
+    private var assistantStatusText: String? {
+        switch message.state {
+        case .thinking:
+            return "Thinking…"
+        case .streaming:
+            return "Answering…"
+        default:
+            return nil
+        }
     }
 
     var body: some View {
@@ -132,15 +143,30 @@ private struct ChatMessageRow: View {
 
     private var assistantMessage: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Openbird")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text("Openbird")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
-            Text(message.content)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+                if let assistantStatusText {
+                    Text(assistantStatusText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.thinMaterial, in: Capsule())
+                }
+            }
 
-            if message.citations.isEmpty == false {
+            if message.state == .thinking && message.content.isEmpty {
+                ThinkingStatusView()
+            } else {
+                Text(message.content)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+
+            if message.citations.isEmpty == false && message.content.isEmpty == false {
                 CitationStrip(citations: message.citations)
             }
         }
@@ -150,9 +176,20 @@ private struct ChatMessageRow: View {
 
     private var userMessage: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("You")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text("You")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                if message.state == .sending {
+                    Text("Sent")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.18), in: Capsule())
+                }
+            }
 
             Text(message.content)
                 .textSelection(.enabled)
@@ -187,6 +224,17 @@ private struct CitationStrip: View {
     }
 }
 
+private struct ThinkingStatusView: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Looking through your day…")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 private struct ChatComposer: View {
     @ObservedObject var model: AppModel
     var focusedField: FocusState<TodayChatDock.FocusField?>.Binding
@@ -194,7 +242,9 @@ private struct ChatComposer: View {
     let send: () -> Void
 
     private var canSend: Bool {
-        model.chatThread != nil && model.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        model.chatThread != nil &&
+        model.isSendingChat == false &&
+        model.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     var body: some View {
@@ -241,9 +291,17 @@ private struct ChatComposer: View {
             }
 
             Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 32, height: 32)
+                Group {
+                    if model.isSendingChat {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                }
+                .frame(width: 32, height: 32)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)

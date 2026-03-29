@@ -11,6 +11,26 @@ final class AppModel: ObservableObject {
         let detail: String
     }
 
+    struct ChatDisplayMessage: Identifiable, Equatable {
+        enum State: Equatable {
+            case committed
+            case sending
+            case thinking
+            case streaming
+        }
+
+        let id: String
+        let role: ChatRole
+        let content: String
+        let citations: [Citation]
+        let state: State
+    }
+
+    private struct PendingAssistantReply {
+        var message: ChatMessage
+        var state: ChatDisplayMessage.State
+    }
+
     private static let automaticUpdateCheckInterval: TimeInterval = 60 * 60 * 12
     private static let dismissedUpdateVersionKey = "openbird.dismissedUpdateVersion"
     private static let lastUpdateCheckDateKey = "openbird.lastUpdateCheckDate"
@@ -37,6 +57,7 @@ final class AppModel: ObservableObject {
     @Published var isInstallingUpdate = false
     @Published var isLoadingInstalledApplications = false
     @Published var isShowingRawLogInspector = false
+    @Published private(set) var isSendingChat = false
     @Published private(set) var shouldFocusChatComposer = false
     @Published private(set) var accessibilityTrusted = false
     @Published private(set) var dayLoadStatus: DayLoadStatus?
@@ -57,6 +78,9 @@ final class AppModel: ObservableObject {
     private var providerConnectionTask: Task<Void, Never>?
     private var providerSaveTask: Task<Void, Never>?
     private var updateCheckTask: Task<Void, Never>?
+    @Published private var pendingUserChatMessage: ChatMessage?
+    @Published private var pendingAssistantReply: PendingAssistantReply?
+    private var chatSendTask: Task<Void, Never>?
     private var providerConnectionRequestID = UUID()
     private var updateCheckRequestID = UUID()
 
@@ -99,6 +123,7 @@ final class AppModel: ObservableObject {
     }
 
     deinit {
+        chatSendTask?.cancel()
         providerConnectionTask?.cancel()
         providerSaveTask?.cancel()
         updateCheckTask?.cancel()
@@ -231,6 +256,44 @@ final class AppModel: ObservableObject {
         ProviderConnectionAdvisor.visibleChatModels(from: availableProviderModels, for: editingProvider.kind)
     }
 
+    var displayedChatMessages: [ChatDisplayMessage] {
+        var messages = chatMessages.map {
+            ChatDisplayMessage(
+                id: $0.id,
+                role: $0.role,
+                content: $0.content,
+                citations: $0.citations,
+                state: .committed
+            )
+        }
+
+        if let pendingUserChatMessage {
+            messages.append(
+                ChatDisplayMessage(
+                    id: pendingUserChatMessage.id,
+                    role: pendingUserChatMessage.role,
+                    content: pendingUserChatMessage.content,
+                    citations: pendingUserChatMessage.citations,
+                    state: .sending
+                )
+            )
+        }
+
+        if let pendingAssistantReply {
+            messages.append(
+                ChatDisplayMessage(
+                    id: pendingAssistantReply.message.id,
+                    role: pendingAssistantReply.message.role,
+                    content: pendingAssistantReply.message.content,
+                    citations: pendingAssistantReply.message.citations,
+                    state: pendingAssistantReply.state
+                )
+            )
+        }
+
+        return messages
+    }
+
     var googleDocsCaptureHint: GoogleDocsCaptureHint? {
         guard Calendar.current.isDateInToday(selectedDay) else {
             return nil
@@ -255,6 +318,8 @@ final class AppModel: ObservableObject {
     }
 
     func refresh() async {
+        chatSendTask?.cancel()
+        clearTransientChatState()
         refreshAccessibilityPermissionState()
         isBusy = true
         defer {
@@ -870,21 +935,47 @@ final class AppModel: ObservableObject {
 
     func sendChat() {
         let question = chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let thread = chatThread, question.isEmpty == false else { return }
-        chatInput = ""
+        guard let thread = chatThread, question.isEmpty == false, isSendingChat == false else { return }
 
-        Task {
+        let userMessage = ChatMessage(threadID: thread.id, role: .user, content: question)
+        let assistantPlaceholder = ChatMessage(threadID: thread.id, role: .assistant, content: "")
+        chatInput = ""
+        pendingUserChatMessage = userMessage
+        pendingAssistantReply = PendingAssistantReply(message: assistantPlaceholder, state: .thinking)
+        isSendingChat = true
+
+        chatSendTask?.cancel()
+        chatSendTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
             do {
                 let query = ChatQuery(
                     threadID: thread.id,
                     question: question,
-                    dateRange: Calendar.current.dayRange(for: selectedDay)
+                    dateRange: Calendar.current.dayRange(for: selectedDay),
+                    userMessageID: userMessage.id,
+                    assistantMessageID: assistantPlaceholder.id
                 )
-                _ = try await chatService.answer(query)
-                chatMessages = try await store.loadMessages(threadID: thread.id)
+                let assistantMessage = try await chatService.answer(query)
+
+                guard Task.isCancelled == false, chatThread?.id == thread.id else {
+                    return
+                }
+
+                await streamAssistantReply(assistantMessage, threadID: thread.id)
+            } catch is CancellationError {
+                clearTransientChatState()
             } catch {
+                if chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    chatInput = question
+                }
+                clearTransientChatState()
                 errorMessage = error.localizedDescription
             }
+
+            chatSendTask = nil
         }
     }
 
@@ -902,5 +993,48 @@ final class AppModel: ObservableObject {
                 providerID: settings.activeProviderID
             )
         )
+    }
+
+    private func clearTransientChatState() {
+        isSendingChat = false
+        pendingUserChatMessage = nil
+        pendingAssistantReply = nil
+    }
+
+    private func streamAssistantReply(_ message: ChatMessage, threadID: String) async {
+        pendingAssistantReply = PendingAssistantReply(
+            message: ChatMessage(
+                id: message.id,
+                threadID: message.threadID,
+                role: message.role,
+                content: "",
+                citations: message.citations,
+                createdAt: message.createdAt
+            ),
+            state: .streaming
+        )
+
+        let characters = Array(message.content)
+        let chunkCount = min(max(characters.count / 8, 12), 48)
+        let chunkSize = max(1, Int(ceil(Double(max(characters.count, 1)) / Double(chunkCount))))
+        var revealedCount = 0
+
+        while revealedCount < characters.count {
+            guard Task.isCancelled == false else {
+                return
+            }
+
+            revealedCount = min(revealedCount + chunkSize, characters.count)
+            pendingAssistantReply?.message.content = String(characters.prefix(revealedCount))
+            try? await Task.sleep(for: .milliseconds(35))
+        }
+
+        do {
+            chatMessages = try await store.loadMessages(threadID: threadID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        clearTransientChatState()
     }
 }
