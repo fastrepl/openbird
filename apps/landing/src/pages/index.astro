@@ -1,0 +1,680 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const releaseUrl = "https://github.com/ComputelessComputer/openbird/releases/latest";
+const sourceUrl = "https://github.com/ComputelessComputer/openbird";
+
+const signals = [
+  {
+    label: "Local-first by default",
+    value: "No account. No backend.",
+  },
+  {
+    label: "Privacy boundary",
+    value: "Inspect, pause, exclude, delete.",
+  },
+  {
+    label: "Bring your own model",
+    value: "Ollama, LM Studio, OpenAI-compatible.",
+  },
+  {
+    label: "Built for macOS",
+    value: "Apple Silicon, macOS 14+.",
+  },
+];
+
+const flow = [
+  {
+    step: "01",
+    title: "Capture the frontmost context",
+    body: "Openbird records the app, window, browser URL, and visible accessibility text from the active surface instead of quietly vacuuming your machine.",
+  },
+  {
+    step: "02",
+    title: "Build a local timeline",
+    body: "Your day is organized into time blocks with inspectable references back to the apps, docs, URLs, and timestamps behind each summary.",
+  },
+  {
+    step: "03",
+    title: "Review, ask, and verify",
+    body: "Generate a daily review or ask follow-up questions against your own activity history without turning that history into somebody else’s product.",
+  },
+];
+
+const captures = [
+  "frontmost app and bundle ID",
+  "window title",
+  "browser tab URL when available",
+  "visible accessibility-tree text",
+  "start and end timestamps",
+];
+
+const noCapture = [
+  "raw key events",
+  "clipboard contents",
+  "passwords or secure fields",
+  "hidden or minimized windows",
+  "automatic screenshots",
+];
+
+const models = [
+  {
+    name: "Ollama",
+    copy: "Run fully local generation and embeddings from the default `127.0.0.1:11434` endpoint.",
+  },
+  {
+    name: "LM Studio",
+    copy: "Point Openbird at a local OpenAI-compatible server and stay offline while keeping setup simple.",
+  },
+  {
+    name: "OpenAI-compatible",
+    copy: "Bring a hosted endpoint when you want it, but keep the app’s privacy boundary explicit and inspectable.",
+  },
+];
+
+const principles = [
+  "The app is open source because software this sensitive should be inspectable.",
+  "The data stays on your Mac unless you explicitly connect a model endpoint.",
+  "The controls stay close to the behavior: pause capture, exclude sources, inspect raw logs, delete history.",
+];
+---
+
+<BaseLayout description="Openbird is a local-first macOS activity journal that turns your work context into a daily review and follow-up chat without hiding the privacy boundary.">
+  <header class="site-header">
+    <div class="container header-row">
+      <a class="brand" href="#top">
+        <span class="brand-mark">OB</span>
+        <span class="brand-text">Openbird</span>
+      </a>
+
+      <nav class="header-links">
+        <a href="#privacy">Privacy</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#models">Models</a>
+        <a class="button button-secondary header-button" href={releaseUrl}>Latest release</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow fade-up">Local-first activity journal for macOS</span>
+          <h1 class="fade-up delay-1">Your workday should not disappear into a black box.</h1>
+          <p class="fade-up delay-2">
+            Openbird watches the current context on your Mac, stores it locally, and turns it into a
+            daily review and follow-up chat you can actually inspect.
+          </p>
+          <div class="button-row fade-up delay-3">
+            <a class="button button-primary" href={releaseUrl}>Download latest build</a>
+            <a class="button button-secondary" href={sourceUrl}>Inspect the source</a>
+          </div>
+          <div class="signal-grid fade-up delay-3">
+            {signals.map((signal) => (
+              <article class="signal-card">
+                <span>{signal.label}</span>
+                <strong>{signal.value}</strong>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div class="hero-panel glass-card fade-up delay-2">
+          <div class="panel-orb panel-orb-warm"></div>
+          <div class="panel-orb panel-orb-cool"></div>
+          <div class="panel-shell">
+            <div class="panel-topbar">
+              <span class="kicker">Today</span>
+              <span class="topbar-meta">Friday review • local only</span>
+            </div>
+
+            <div class="timeline-card">
+              <div class="timeline-header">
+                <h2>Captured without the mystery.</h2>
+                <span class="privacy-pill">privacy boundary visible</span>
+              </div>
+              <p>
+                Every summary can be traced back to the underlying app, URL, and timestamp. If the app
+                can see it, you should be able to inspect it too.
+              </p>
+              <div class="timeline-list">
+                <article>
+                  <span>9:08 AM</span>
+                  <div>
+                    <strong>Xcode</strong>
+                    <p>Reviewed the Openbird timeline UI and adjusted the daily journal flow.</p>
+                  </div>
+                </article>
+                <article>
+                  <span>11:24 AM</span>
+                  <div>
+                    <strong>Safari</strong>
+                    <p>Compared local model endpoints and checked Ollama compatibility notes.</p>
+                  </div>
+                </article>
+                <article>
+                  <span>2:37 PM</span>
+                  <div>
+                    <strong>Linear + Notes</strong>
+                    <p>Answered follow-up questions about what changed and which project consumed focus.</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-strip">
+      <div class="container trust-strip-inner">
+        <p>Built for people who want a useful memory aid without outsourcing the boundary of trust.</p>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Privacy boundary</span>
+          <h2>Openbird is intentionally conservative.</h2>
+          <p>
+            The capture model is narrow on purpose. The goal is enough context to reconstruct your day
+            without collecting more than the product can justify.
+          </p>
+        </div>
+
+        <div class="grid-2">
+          <article class="detail-card glass-card">
+            <div class="detail-card-head">
+              <span class="detail-chip detail-chip-capture">Openbird captures</span>
+              <h3>Just enough context to rebuild the day.</h3>
+            </div>
+            <ul class="detail-list">
+              {captures.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </article>
+
+          <article class="detail-card glass-card">
+            <div class="detail-card-head">
+              <span class="detail-chip detail-chip-stop">Openbird does not capture</span>
+              <h3>The lines are explicit instead of implied.</h3>
+            </div>
+            <ul class="detail-list">
+              {noCapture.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Workflow</span>
+          <h2>From active window to daily review.</h2>
+          <p>
+            The experience stays simple: capture the frontmost context, organize it locally, and surface
+            a review that remains tied to the underlying evidence.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          {flow.map((item) => (
+            <article class="step-card glass-card">
+              <span class="step-number">{item.step}</span>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section id="models">
+      <div class="container model-panel glass-card">
+        <div class="section-head compact-head">
+          <span class="eyebrow">Bring your own model</span>
+          <h2>Use local models when you want local everything.</h2>
+          <p>
+            Openbird ships with presets for Ollama and LM Studio, and it also works with other
+            OpenAI-compatible endpoints when you choose to connect one.
+          </p>
+        </div>
+
+        <div class="grid-3 model-grid">
+          {models.map((model) => (
+            <article class="model-card">
+              <h3>{model.name}</h3>
+              <p>{model.copy}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="principles">
+      <div class="container principles-grid">
+        <div class="section-head">
+          <span class="eyebrow">Open source</span>
+          <h2>Opacity is the bug.</h2>
+          <p>
+            If software can see your work, the implementation should be inspectable. Openbird treats
+            transparency as part of the product, not just the licensing.
+          </p>
+        </div>
+
+        <div class="principle-list">
+          {principles.map((principle) => (
+            <article class="principle-card">
+              <p>{principle}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="container cta-card glass-card">
+        <div>
+          <span class="eyebrow">Available now</span>
+          <h2>Review your day without surrendering it.</h2>
+        </div>
+        <div class="button-row">
+          <a class="button button-primary" href={releaseUrl}>Download latest release</a>
+          <a class="button button-secondary" href={sourceUrl}>Read the code</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(18px);
+    background: rgba(244, 240, 229, 0.72);
+    border-bottom: 1px solid rgba(17, 41, 31, 0.08);
+  }
+
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 5rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.95rem;
+    color: #f6f3ea;
+    background: linear-gradient(135deg, var(--ink), #214535);
+    box-shadow: 0 18px 36px rgba(17, 41, 31, 0.14);
+  }
+
+  .brand-text {
+    font-size: 1.2rem;
+  }
+
+  .header-links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .header-button {
+    min-height: 2.7rem;
+    padding-inline: 1rem;
+  }
+
+  .hero {
+    padding-top: 4rem;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+    gap: 1.5rem;
+    align-items: center;
+  }
+
+  .hero-copy {
+    display: grid;
+    gap: 1.35rem;
+    max-width: 42rem;
+  }
+
+  .signal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+    margin-top: 0.3rem;
+  }
+
+  .signal-card {
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background: rgba(255, 255, 255, 0.66);
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .signal-card span {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .signal-card strong {
+    font-size: 1rem;
+  }
+
+  .hero-panel {
+    min-height: 42rem;
+    padding: 1.4rem;
+  }
+
+  .panel-shell {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 1rem;
+    height: 100%;
+  }
+
+  .panel-orb {
+    position: absolute;
+    width: 14rem;
+    height: 14rem;
+    border-radius: 999px;
+    filter: blur(14px);
+    opacity: 0.55;
+    animation: orbit 8s ease-in-out infinite;
+  }
+
+  .panel-orb-warm {
+    right: -2rem;
+    top: 2rem;
+    background: radial-gradient(circle, rgba(255, 123, 71, 0.42), transparent 68%);
+  }
+
+  .panel-orb-cool {
+    left: -2rem;
+    bottom: 2rem;
+    animation-delay: 900ms;
+    background: radial-gradient(circle, rgba(31, 138, 91, 0.34), transparent 68%);
+  }
+
+  .panel-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .topbar-meta {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .timeline-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1.4rem;
+    border-radius: 1.5rem;
+    border: 1px solid rgba(17, 41, 31, 0.12);
+    background: rgba(255, 250, 240, 0.82);
+  }
+
+  .timeline-header {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .privacy-pill {
+    width: fit-content;
+    padding: 0.42rem 0.8rem;
+    border-radius: 999px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .timeline-list {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .timeline-list article {
+    display: grid;
+    grid-template-columns: 5.2rem minmax(0, 1fr);
+    gap: 0.9rem;
+    align-items: start;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(17, 41, 31, 0.08);
+  }
+
+  .timeline-list span {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 0.95rem;
+  }
+
+  .timeline-list strong {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 1rem;
+  }
+
+  .trust-strip {
+    padding-top: 0.5rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .trust-strip-inner {
+    padding: 1.35rem 1.5rem;
+    border-top: 1px solid rgba(17, 41, 31, 0.12);
+    border-bottom: 1px solid rgba(17, 41, 31, 0.12);
+  }
+
+  .trust-strip p {
+    font-size: 1.05rem;
+    color: var(--ink);
+  }
+
+  .detail-card,
+  .step-card,
+  .cta-card {
+    padding: 1.4rem;
+  }
+
+  .detail-card {
+    display: grid;
+    gap: 1.2rem;
+  }
+
+  .detail-card-head {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .detail-chip {
+    width: fit-content;
+    padding: 0.45rem 0.78rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .detail-chip-capture {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .detail-chip-stop {
+    color: var(--warm);
+    background: var(--warm-soft);
+  }
+
+  .detail-list {
+    display: grid;
+    gap: 0.8rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .detail-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(17, 41, 31, 0.08);
+    color: var(--ink);
+  }
+
+  .detail-list li::before {
+    content: "";
+    flex: 0 0 0.7rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--warm), var(--accent));
+  }
+
+  .step-card {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .step-number {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  .model-panel {
+    padding: 1.6rem;
+  }
+
+  .compact-head {
+    margin-bottom: 1.4rem;
+  }
+
+  .model-grid {
+    align-items: stretch;
+  }
+
+  .model-card {
+    padding: 1.2rem;
+    border: 1px solid rgba(17, 41, 31, 0.1);
+    border-radius: 1.3rem;
+    background: rgba(255, 255, 255, 0.58);
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .principles-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .principle-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .principle-card {
+    padding: 1.2rem;
+    border-radius: 1.35rem;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 18px 48px rgba(17, 41, 31, 0.08);
+  }
+
+  .principle-card p {
+    color: var(--ink);
+  }
+
+  .cta {
+    padding-top: 0;
+    padding-bottom: 5rem;
+  }
+
+  .cta-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.2rem;
+  }
+
+  @media (max-width: 960px) {
+    .site-header {
+      position: static;
+    }
+
+    .header-row,
+    .header-links,
+    .cta-card {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .hero {
+      padding-top: 2.5rem;
+    }
+
+    .hero-grid,
+    .principles-grid,
+    .signal-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .hero-panel {
+      min-height: auto;
+    }
+
+    .timeline-list article {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .header-links {
+      width: 100%;
+      gap: 0.8rem;
+    }
+
+    .header-links a:not(.header-button) {
+      display: none;
+    }
+
+    .header-button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
