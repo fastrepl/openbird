@@ -4,598 +4,180 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 const releaseUrl = "https://github.com/ComputelessComputer/openbird/releases/latest";
 const sourceUrl = "https://github.com/ComputelessComputer/openbird";
 
-const signals = [
-  "No account required",
-  "No backend required",
-  "Pause capture at any time",
-  "Delete the last hour, day, or everything",
-];
-
-const flow = [
-  {
-    command: "capture",
-    title: "Watch the frontmost context",
-    body: "Openbird records the active app, window, browser URL, and visible accessibility text instead of pretending the boundary does not matter.",
-  },
-  {
-    command: "review",
-    title: "Build a local daily timeline",
-    body: "Your day is grouped into inspectable blocks with references back to the apps, windows, URLs, and timestamps underneath the summary.",
-  },
-  {
-    command: "chat",
-    title: "Ask follow-up questions later",
-    body: "Use the local activity history to answer what you were doing, when you were doing it, and what actually consumed your time.",
-  },
-];
-
 const captures = [
   "frontmost app and bundle ID",
   "window title",
   "browser tab URL when available",
-  "visible text from the active accessibility tree",
+  "visible text from the active window accessibility tree",
   "start and end timestamps",
 ];
 
 const noCapture = [
   "raw key events",
   "clipboard contents",
-  "passwords or secure fields",
+  "passwords",
+  "secure text fields",
   "hidden or minimized windows",
   "automatic screenshots",
 ];
 
-const models = [
-  {
-    name: "Ollama",
-    copy: "Point at `127.0.0.1:11434` and keep generation on your machine.",
-  },
-  {
-    name: "LM Studio",
-    copy: "Use a local OpenAI-compatible server without changing the product model.",
-  },
-  {
-    name: "Other compatible endpoints",
-    copy: "Bring a hosted provider when you choose to, not because the app requires it.",
-  },
+const questions = [
+  "What did I do today?",
+  "What was I working on around 3pm?",
+  "Which project took most of my attention?",
+  "What tabs, apps, or docs was I using during that block?",
 ];
 
-const surfaces = [
-  "Onboarding explains the permission model before capture starts.",
-  "Today turns recent activity into a structured review with citations.",
-  "Chat stays scoped to the local activity history you already own.",
-  "Settings exposes pause, exclusions, retention, and deletion controls.",
+const models = [
+  "Ollama",
+  "LM Studio",
+  "other OpenAI-compatible endpoints",
 ];
 ---
 
-<BaseLayout description="Openbird is a local-first macOS activity journal that turns your work context into a daily review and follow-up chat without hiding the privacy boundary.">
-  <header class="site-header">
-    <div class="container header-row">
-      <a class="brand" href="#top">
-        <span class="brand-mark"></span>
-        <span>Openbird</span>
-      </a>
-
-      <nav class="header-links">
-        <a href="#privacy">Privacy</a>
-        <a href="#workflow">Workflow</a>
-        <a href="#models">Models</a>
-        <a href={sourceUrl}>GitHub</a>
+<BaseLayout description="Openbird is a local-first macOS activity journal. It captures your current work context on your Mac, stores that data locally, and turns it into a daily review and follow-up chat.">
+  <main class="page">
+    <header>
+      <p><strong>Openbird</strong></p>
+      <p class="muted">Local-first macOS activity journal.</p>
+      <nav aria-label="Page">
+        <ul>
+          <li><a href="#what-it-does">What it does</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#models">Models</a></li>
+          <li><a href="#install">Install</a></li>
+          <li><a href={sourceUrl}>GitHub</a></li>
+        </ul>
       </nav>
-    </div>
-  </header>
+    </header>
 
-  <main id="top">
-    <section class="hero">
-      <div class="container hero-grid">
-        <div class="hero-copy">
-          <span class="eyebrow fade-up">Local-first activity journal for macOS</span>
-          <h1 class="fade-up delay-1">Software that watches your day should not ask for blind trust.</h1>
-          <p class="hero-sub fade-up delay-2">
-            Openbird captures the current context on your Mac, stores it locally, and turns it into a
-            daily review and follow-up chat you can inspect, pause, exclude, and delete.
-          </p>
+    <hr />
 
-          <div class="button-row fade-up delay-3">
-            <a class="button button-primary" href={releaseUrl}>Download latest release</a>
-            <a class="button button-secondary" href={sourceUrl}>Inspect the source</a>
-          </div>
-
-          <div class="hero-meta fade-up delay-3">
-            {signals.map((signal) => (
-              <span>{signal}</span>
-            ))}
-          </div>
-        </div>
-
-        <aside class="terminal hero-terminal fade-up delay-2">
-          <div class="terminal-bar">
-            <div class="terminal-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span>openbird / local review</span>
-          </div>
-
-          <div class="terminal-body">
-            <p class="prompt">$ openbird today --generate</p>
-            <div class="log-block">
-              <div>
-                <span>09:08</span>
-                <strong>Xcode</strong>
-                <p>Adjusted timeline and review behavior.</p>
-              </div>
-              <div>
-                <span>11:24</span>
-                <strong>Safari</strong>
-                <p>Compared Ollama and LM Studio endpoints.</p>
-              </div>
-              <div>
-                <span>14:37</span>
-                <strong>Notes + Linear</strong>
-                <p>Prepared follow-up questions from the activity log.</p>
-              </div>
-            </div>
-
-            <div class="terminal-divider"></div>
-
-            <div class="terminal-summary">
-              <p>Review ready.</p>
-              <p>Sources linked.</p>
-              <p>Data stored locally at `~/Library/Application Support/Openbird/openbird.sqlite`.</p>
-            </div>
-          </div>
-        </aside>
-      </div>
+    <section>
+      <h1>Software that watches your day should not be a black box.</h1>
+      <p>
+        Openbird captures your current work context on your Mac, stores that data locally, and turns it
+        into a daily review and follow-up chat.
+      </p>
+      <p>
+        No account is required. No backend is required. The point is that if software can see this much
+        of your day, you should be able to inspect it, control it, and delete it.
+      </p>
+      <p>
+        <a href={releaseUrl}>Download the latest release</a>
+        {" · "}
+        <a href={sourceUrl}>Read the source code</a>
+      </p>
     </section>
 
-    <section class="section-rule">
-      <div class="container">Why this exists</div>
+    <section id="what-it-does">
+      <h2>What Openbird Does</h2>
+      <p>
+        Openbird watches the frontmost app and window, builds a local timeline of your day, and uses
+        that log to generate:
+      </p>
+      <ul>
+        <li>a daily review with time blocks, highlights, and a short narrative</li>
+        <li>follow-up chat scoped to your local activity data</li>
+        <li>citations back to the underlying apps, windows, URLs, and timestamps</li>
+      </ul>
+      <p>It is meant to answer questions like:</p>
+      <ul>
+        {questions.map((question) => (
+          <li>{question}</li>
+        ))}
+      </ul>
     </section>
 
-    <section class="manifesto">
-      <div class="container manifesto-grid">
-        <div class="section-head">
-          <span class="eyebrow">Manifesto</span>
-          <h2>Trust is part of the product.</h2>
-        </div>
+    <section>
+      <h2>What This Looks Like</h2>
+      <pre>09:08  Xcode         reviewed timeline UI and journal flow
+11:24  Safari        compared Ollama and LM Studio endpoints
+14:37  Notes         prepared follow-up questions from the local log
 
-        <div class="manifesto-copy">
-          <p>
-            Most work now happens inside apps and tabs. If a tool can reconstruct your day, the
-            implementation should be visible and the controls should be close to the behavior.
-          </p>
-          <p class="serif manifesto-quote">
-            Inspect the raw log. Exclude sources. Bring your own model. Delete the history.
-          </p>
-        </div>
-      </div>
+Review ready.
+Sources linked.
+Stored locally on your Mac.</pre>
     </section>
 
-    <section class="section-rule" id="privacy">
-      <div class="container">Privacy boundary</div>
+    <section id="privacy">
+      <h2>Privacy Boundary</h2>
+      <p>Openbird is intentionally conservative.</p>
+
+      <h3>Openbird captures</h3>
+      <ul>
+        {captures.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+
+      <h3>Openbird does not capture</h3>
+      <ul>
+        {noCapture.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+
+      <p>
+        You can also pause capture, exclude apps, exclude domains, inspect the raw log used for
+        generation, and delete the last hour, the last day, or everything.
+      </p>
+
+      <p class="small muted">
+        Local storage path: <code>~/Library/Application Support/Openbird/openbird.sqlite</code>
+      </p>
     </section>
 
-    <section class="privacy">
-      <div class="container grid-2">
-        <article class="terminal data-card">
-          <div class="terminal-bar">
-            <div class="terminal-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span>what openbird captures</span>
-          </div>
-          <div class="data-card-body">
-            <ul>
-              {captures.map((item) => (
-                <li>{item}</li>
-              ))}
-            </ul>
-          </div>
-        </article>
-
-        <article class="terminal data-card stop-card">
-          <div class="terminal-bar">
-            <div class="terminal-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span>what openbird does not capture</span>
-          </div>
-          <div class="data-card-body">
-            <ul>
-              {noCapture.map((item) => (
-                <li>{item}</li>
-              ))}
-            </ul>
-          </div>
-        </article>
-      </div>
+    <section id="models">
+      <h2>Bring Your Own Model</h2>
+      <p>Openbird supports local-first BYOK out of the box.</p>
+      <ul>
+        {models.map((model) => (
+          <li>{model}</li>
+        ))}
+      </ul>
+      <p>You can run fully offline if your model is local.</p>
+      <p class="small muted">
+        Default local endpoints:
+        <br />
+        Ollama: <code>http://127.0.0.1:11434/v1</code>
+        <br />
+        LM Studio: <code>http://127.0.0.1:1234/v1</code>
+      </p>
     </section>
 
-    <section class="section-rule" id="workflow">
-      <div class="container">Workflow</div>
+    <section id="install">
+      <h2>Install</h2>
+      <p>Current release target: macOS 14+ on Apple Silicon.</p>
+      <ol>
+        <li><a href={releaseUrl}>Download the latest release</a>.</li>
+        <li>Open the DMG and drag <code>Openbird.app</code> into Applications.</li>
+        <li>Launch the app and grant Accessibility permission when prompted.</li>
+        <li>Choose an Ollama or LM Studio preset in Settings.</li>
+        <li>Generate your first review from the Today screen.</li>
+      </ol>
     </section>
 
-    <section class="workflow">
-      <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">From active window to useful recall</span>
-          <h2>The loop stays narrow and explicit.</h2>
-        </div>
-
-        <div class="grid-3">
-          {flow.map((item) => (
-            <article class="terminal step-card">
-              <div class="terminal-bar">
-                <div class="terminal-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-                <span>{item.command}</span>
-              </div>
-              <div class="step-body">
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
+    <section>
+      <h2>Open Source</h2>
+      <p>
+        Open source is not a branding choice here. It is part of the product. When software observes
+        your work, transparency matters.
+      </p>
+      <p>
+        You should be able to inspect how it captures data, where it stores it, what it excludes, and
+        which model receives your prompts.
+      </p>
     </section>
 
-    <section class="section-rule" id="models">
-      <div class="container">Model support</div>
-    </section>
+    <hr />
 
-    <section class="models">
-      <div class="container models-grid">
-        <div class="section-head">
-          <span class="eyebrow">Bring your own model</span>
-          <h2>Use local models when you want local everything.</h2>
-          <p>
-            Openbird includes presets for Ollama and LM Studio, and it also supports other
-            OpenAI-compatible endpoints when you decide a hosted provider is worth it.
-          </p>
-        </div>
-
-        <div class="model-list">
-          {models.map((model) => (
-            <article class="terminal model-card">
-              <div class="terminal-bar">
-                <div class="terminal-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-                <span>{model.name}</span>
-              </div>
-              <div class="model-card-body">
-                <p>{model.copy}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <section class="section-rule">
-      <div class="container">Product surfaces</div>
-    </section>
-
-    <section class="surfaces">
-      <div class="container surfaces-grid">
-        <div class="section-head">
-          <span class="eyebrow">What the app exposes</span>
-          <h2>Useful memory aid. Visible controls.</h2>
-        </div>
-
-        <article class="terminal surfaces-card">
-          <div class="terminal-bar">
-            <div class="terminal-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span>openbird surfaces</span>
-          </div>
-          <div class="surfaces-body">
-            <ol>
-              {surfaces.map((surface) => (
-                <li>{surface}</li>
-              ))}
-            </ol>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section class="cta">
-      <div class="container terminal cta-card">
-        <div class="terminal-bar">
-          <div class="terminal-dots">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          <span>available now</span>
-        </div>
-        <div class="cta-body">
-          <div>
-            <span class="eyebrow">Open source</span>
-            <h2>Review your day without handing it over.</h2>
-          </div>
-          <div class="button-row">
-            <a class="button button-primary" href={releaseUrl}>Download latest release</a>
-            <a class="button button-secondary" href={sourceUrl}>Read the code</a>
-          </div>
-        </div>
-      </div>
-    </section>
+    <footer>
+      <p class="small">
+        Openbird is a local-first macOS activity journal.
+        <a href={releaseUrl}>Latest release</a>.
+        <a href={sourceUrl}>Source code</a>.
+      </p>
+    </footer>
   </main>
 </BaseLayout>
-
-<style>
-  .site-header {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(7, 9, 12, 0.86);
-    backdrop-filter: blur(16px);
-  }
-
-  .header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 4.6rem;
-  }
-
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.8rem;
-    font-size: 0.95rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .brand-mark {
-    width: 0.85rem;
-    height: 0.85rem;
-    border-radius: 999px;
-    background: linear-gradient(135deg, var(--accent), var(--warm));
-    box-shadow: 0 0 24px rgba(140, 249, 141, 0.38);
-  }
-
-  .header-links {
-    display: flex;
-    align-items: center;
-    gap: 1.2rem;
-    color: var(--muted);
-    font-size: 0.82rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .header-links a:hover {
-    color: var(--ink);
-  }
-
-  .hero {
-    padding-top: 4.2rem;
-  }
-
-  .hero-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .hero-copy {
-    display: grid;
-    gap: 1.35rem;
-    max-width: 44rem;
-  }
-
-  .hero-sub {
-    max-width: 39rem;
-    font-size: 1.04rem;
-  }
-
-  .hero-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 0.4rem;
-  }
-
-  .hero-meta span {
-    padding: 0.62rem 0.75rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    color: var(--muted-strong);
-    font-size: 0.78rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .hero-terminal {
-    overflow: hidden;
-  }
-
-  .terminal-body,
-  .data-card-body,
-  .step-body,
-  .model-card-body,
-  .surfaces-body,
-  .cta-body {
-    padding: 1rem;
-  }
-
-  .prompt {
-    color: var(--accent);
-    margin-bottom: 1rem;
-  }
-
-  .log-block {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .log-block div {
-    display: grid;
-    grid-template-columns: 4.8rem minmax(0, 1fr);
-    gap: 0.85rem;
-    align-items: start;
-  }
-
-  .log-block span,
-  .surfaces-body li::marker {
-    color: var(--muted);
-  }
-
-  .log-block strong {
-    display: block;
-    margin-bottom: 0.15rem;
-    font-size: 0.96rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .terminal-divider {
-    height: 1px;
-    margin: 1rem 0;
-    background: var(--line);
-  }
-
-  .terminal-summary {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .manifesto-grid,
-  .models-grid,
-  .surfaces-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .manifesto-copy {
-    display: grid;
-    gap: 1rem;
-    max-width: 42rem;
-  }
-
-  .manifesto-quote {
-    color: var(--ink);
-    font-size: clamp(1.7rem, 4vw, 2.7rem);
-    line-height: 1.02;
-  }
-
-  .data-card ul,
-  .surfaces-body ol {
-    display: grid;
-    gap: 0.9rem;
-    margin: 0;
-    padding-left: 1.2rem;
-  }
-
-  .data-card li,
-  .surfaces-body li {
-    color: var(--muted-strong);
-  }
-
-  .stop-card li::marker {
-    color: var(--warm);
-  }
-
-  .step-card,
-  .model-card {
-    overflow: hidden;
-  }
-
-  .step-body,
-  .model-card-body {
-    display: grid;
-    gap: 0.9rem;
-    min-height: 100%;
-  }
-
-  .step-body h3 {
-    max-width: 16rem;
-  }
-
-  .model-list {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .cta {
-    padding-top: 1rem;
-    padding-bottom: 5rem;
-  }
-
-  .cta-card {
-    overflow: hidden;
-  }
-
-  .cta-body {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1.2rem;
-  }
-
-  @media (max-width: 960px) {
-    .site-header {
-      position: static;
-    }
-
-    .hero-grid,
-    .manifesto-grid,
-    .models-grid,
-    .surfaces-grid,
-    .cta-body {
-      grid-template-columns: 1fr;
-      display: grid;
-      align-items: start;
-    }
-
-    .cta-body {
-      gap: 1.4rem;
-    }
-  }
-
-  @media (max-width: 720px) {
-    .header-row,
-    .header-links {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .header-links {
-      width: 100%;
-      gap: 0.75rem;
-      padding-bottom: 1rem;
-    }
-
-    .log-block div {
-      grid-template-columns: 1fr;
-    }
-
-    .hero {
-      padding-top: 2.7rem;
-    }
-  }
-</style>
