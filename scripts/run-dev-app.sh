@@ -30,6 +30,7 @@ mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}"
 
 install -m 755 "${BUILD_DIR}/OpenbirdApp" "${MACOS_DIR}/OpenbirdApp"
 "${ROOT_DIR}/scripts/build-app-icon.sh" "${RESOURCES_DIR}/Openbird.icns"
+install -m 644 "${ROOT_DIR}/Sources/OpenbirdApp/Resources/tray.png" "${RESOURCES_DIR}/tray.png"
 
 sed \
   -e "s/__APP_NAME__/Openbird Dev/g" \

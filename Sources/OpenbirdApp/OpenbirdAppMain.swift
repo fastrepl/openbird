@@ -76,19 +76,84 @@ private struct OpenbirdStatusMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Button("Open App") {
+        Button("Open Openbird") {
             openApp()
         }
 
+        Button("Settings") {
+            openSettings()
+        }
+
+        Menu("Pause Context Collection") {
+            if model.isCapturePaused {
+                Button("Resume now") {
+                    model.resumeCapture()
+                }
+
+                Divider()
+            }
+
+            Button("For 5 minutes") {
+                model.pauseCapture(for: 5 * 60)
+            }
+
+            Button("For 15 minutes") {
+                model.pauseCapture(for: 15 * 60)
+            }
+
+            Button("For 30 minutes") {
+                model.pauseCapture(for: 30 * 60)
+            }
+
+            Button("For an hour") {
+                model.pauseCapture(for: 60 * 60)
+            }
+
+            Divider()
+
+            Button("Until next launch") {
+                model.pauseCaptureUntilNextLaunch()
+            }
+        }
+
+        Menu("Exclude") {
+            Button(model.currentAppExclusionTitle) {
+                model.excludeCurrentApp()
+            }
+            .disabled(model.canExcludeCurrentApp == false)
+
+            Divider()
+
+            Button(model.currentDomainExclusionTitle) {
+                model.excludeCurrentDomain()
+            }
+            .disabled(model.canExcludeCurrentDomain == false)
+        }
+
+        if let versionText = model.menuVersionText {
+            Divider()
+
+            Button(versionText) {}
+                .disabled(true)
+        }
+
+        if let updateStatusText = model.menuUpdateStatusText {
+            Button(updateStatusText) {}
+                .disabled(true)
+        }
+
         Button("Check for Updates") {
-            openApp()
             model.checkForUpdates()
         }
 
         Divider()
 
-        Button("Quit Completely") {
+        Button("Quit Openbird Completely") {
             appLifecycle.quitCompletely()
+        }
+        .onAppear {
+            model.refreshStatusMenuContext()
+            Task { await model.refreshCollectorState() }
         }
     }
 
@@ -96,10 +161,48 @@ private struct OpenbirdStatusMenu: View {
         openWindow(id: OpenbirdSceneID.main)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
 }
 
 private struct OpenbirdStatusMenuLabel: View {
     private let iconSize: CGFloat = 18
+    private static let trayImageSearchURLs: [URL] = {
+        let fileManager = FileManager.default
+        let searchDirectories = [
+            Bundle.main.resourceURL,
+            Bundle.main.executableURL?.deletingLastPathComponent(),
+        ].compactMap { $0 }
+        var urls: [URL] = []
+        var seenPaths = Set<String>()
+
+        for directory in searchDirectories {
+            let directImageURL = directory.appendingPathComponent("tray.png")
+            if seenPaths.insert(directImageURL.path).inserted {
+                urls.append(directImageURL)
+            }
+
+            guard let contents = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+
+            for bundleURL in contents where bundleURL.pathExtension == "bundle" {
+                let imageURL = bundleURL.appendingPathComponent("tray.png")
+                if seenPaths.insert(imageURL.path).inserted {
+                    urls.append(imageURL)
+                }
+            }
+        }
+
+        return urls
+    }()
 
     var body: some View {
         Image(nsImage: trayIcon)
@@ -116,12 +219,13 @@ private struct OpenbirdStatusMenuLabel: View {
     }
 
     private func trayResourceIcon() -> NSImage? {
-        guard let url = Bundle.module.url(forResource: "tray", withExtension: "png"),
-              let icon = NSImage(contentsOf: url) else {
-            return nil
+        for url in Self.trayImageSearchURLs {
+            if let icon = NSImage(contentsOf: url) {
+                return icon
+            }
         }
 
-        return icon
+        return nil
     }
 
     private func fallbackIcon() -> NSImage {
