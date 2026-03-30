@@ -2,8 +2,12 @@ import Foundation
 
 public extension Calendar {
     func dayRange(for date: Date) -> ClosedRange<Date> {
-        let start = startOfDay(for: date)
-        let end = self.date(byAdding: .day, value: 1, to: start)?.addingTimeInterval(-1) ?? start
-        return start...end
+        guard let interval = dateInterval(of: .day, for: date) else {
+            let start = startOfDay(for: date)
+            return start...start
+        }
+
+        let inclusiveEnd = Date(timeIntervalSinceReferenceDate: interval.end.timeIntervalSinceReferenceDate.nextDown)
+        return interval.start...inclusiveEnd
     }
 }
