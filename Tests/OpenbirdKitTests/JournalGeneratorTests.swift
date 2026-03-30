@@ -48,9 +48,10 @@ struct JournalGeneratorTests {
         )
 
         #expect(journal.sections.count >= 1)
-        #expect(journal.markdown.contains("Stitched together from your local activity logs"))
-        #expect(journal.markdown.contains("## 9:00"))
-        #expect(journal.markdown.contains("Spent this block"))
+        #expect(journal.markdown.contains("Looked through your context."))
+        #expect(journal.markdown.contains("Here's the shape of your"))
+        #expect(journal.markdown.contains("## Investor Portal"))
+        #expect(journal.markdown.contains("This part of the day centered on Investor Portal in Safari."))
     }
 
     @Test func prefersSpecificHeadingsAndDeduplicatedBullets() async throws {
@@ -364,5 +365,8 @@ struct JournalGeneratorTests {
         #expect(journal.sections.first?.bullets.count == 1)
         #expect(journal.sections.first?.bullets.first?.contains("Enter a message") == false)
         #expect(journal.sections.first?.bullets.first?.contains("Voice Call") == false)
+        #expect(journal.markdown.contains("Looked through your context."))
+        #expect(journal.markdown.contains("## Alice"))
+        #expect(journal.markdown.contains("- See you there"))
     }
 }
