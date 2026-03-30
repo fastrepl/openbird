@@ -1184,6 +1184,7 @@ final class AppModel: ObservableObject {
     func sendChat() {
         let question = chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let thread = chatThread, question.isEmpty == false, isSendingChat == false else { return }
+        let requestedDayRange = Calendar.current.dayRange(for: selectedDay)
 
         let userMessage = ChatMessage(threadID: thread.id, role: .user, content: question)
         let assistantPlaceholder = ChatMessage(threadID: thread.id, role: .assistant, content: "")
@@ -1203,7 +1204,7 @@ final class AppModel: ObservableObject {
                 let query = ChatQuery(
                     threadID: thread.id,
                     question: question,
-                    dateRange: Calendar.current.dayRange(for: selectedDay),
+                    dateRange: requestedDayRange,
                     userMessageID: userMessage.id,
                     assistantMessageID: assistantPlaceholder.id
                 )
