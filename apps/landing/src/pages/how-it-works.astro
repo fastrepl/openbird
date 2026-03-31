@@ -3,6 +3,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 
 const collectionItems = [
   "Openbird runs locally on macOS after you grant Accessibility permission.",
+  "This repo is an experimental proof of concept focused on the accessibility pipeline that will later inform native personal-context features in fastrepl/char.",
   "It watches the frontmost app and focused window, capturing app name, bundle ID, window title, browser URL when available, visible accessibility text, and timestamps.",
   "Capture runs when the active app changes and on a short recurring interval while the collector is running.",
   "Pause rules and app or domain exclusions are checked before data is saved.",
@@ -27,7 +28,7 @@ const generationItems = [
 
 <BaseLayout
   title="How Openbird Works | Openbird"
-  description="A plain-English walkthrough of how Openbird collects local activity data, prepares it, and generates a daily review."
+  description="A plain-English walkthrough of how Openbird collects local accessibility context, prepares it, and generates a daily review."
 >
   <main class="page">
     <p class="small"><a href="/">Back to home</a></p>
@@ -35,19 +36,24 @@ const generationItems = [
     <div class="header">
       <img src="/openbird.png" alt="Openbird bird illustration" class="header-icon" />
       <h1>How Openbird works</h1>
-      <p>How data is collected, processed, and turned into the daily summary.</p>
+      <p>How accessibility context is collected, processed, and turned into the current daily summary.</p>
     </div>
 
     <p>
-      Openbird&apos;s summary is built from a local activity timeline, not screenshots or a remote
-      backend. The pipeline is straightforward: collect the frontmost context, clean and group it,
-      then generate a recap from those prepared activity chunks.
+      Openbird&apos;s current summary is built from a local accessibility timeline, not screenshots or
+      a remote backend. The pipeline is straightforward: collect the frontmost context, clean and
+      group it, then generate a recap from those prepared activity chunks.
+    </p>
+
+    <p>
+      This is intentionally a narrow proof of concept. The point is to validate accessibility-first
+      personal context before this capability is integrated natively into fastrepl/char.
     </p>
 
     <h2>Short version</h2>
 
     <ol>
-      <li>Capture the frontmost app, window, URL when available, visible text, and timestamps.</li>
+      <li>Capture the frontmost app, window, URL when available, visible accessibility text, and timestamps.</li>
       <li>Sanitize noisy UI text, merge repeated context, and group related events.</li>
       <li>Turn those grouped events into evidence sections for the day.</li>
       <li>Generate markdown with your configured model, or fall back to a built-in heuristic recap.</li>

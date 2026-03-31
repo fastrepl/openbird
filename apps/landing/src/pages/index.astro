@@ -7,18 +7,24 @@ const latestReleaseApiUrl = "https://api.github.com/repos/ComputelessComputer/op
 const howItWorksUrl = "/how-it-works";
 
 const detailItems = [
-  "Local-first by default. No account or backend required.",
+  "Experimental proof of concept for accessibility-first personal context on macOS.",
   "Captures the frontmost app, window title, browser URL when available, visible accessibility text, and timestamps.",
-  "Does not capture raw key events, clipboard contents, passwords, secure text fields, hidden windows, or automatic screenshots.",
+  "Intentionally focused on Accessibility API data only. No automatic screenshots, raw key events, clipboard contents, passwords, secure text fields, or hidden windows.",
   "Stores captured data locally at <span class=\"mono\">~/Library/Application Support/Openbird/openbird.sqlite</span> and supports Ollama, LM Studio, and other OpenAI-compatible endpoints.",
+  "Built as a native context primitive that can later be integrated directly into fastrepl/char.",
   "Built for macOS 14+ on Apple Silicon.",
 ];
 
 const faqItems = [
   {
-    question: "What can I do with it?",
+    question: "What is Openbird for?",
     answer:
-      "Generate a daily review, ask follow-up questions about your day, and inspect the raw activity log behind both.",
+      "Openbird is a small, focused experiment around turning Accessibility API data into usable personal context. The long-term direction is native integration into fastrepl/char.",
+  },
+  {
+    question: "What can I do with it today?",
+    answer:
+      "Today it can generate a daily review, answer follow-up questions about your day, and let you inspect the raw activity log behind both.",
   },
   {
     question: "Can I control or delete the data?",
@@ -38,7 +44,7 @@ const faqItems = [
 ];
 ---
 
-<BaseLayout description="Openbird is a local-first macOS activity journal that builds a private timeline of your day and turns it into daily reviews and chat.">
+<BaseLayout description="Openbird is an experimental accessibility-first proof of concept for local personal context on macOS.">
   <main class="page">
     <div class="header">
       <img src="/openbird.png" alt="Openbird bird illustration" class="header-icon" />
@@ -46,22 +52,29 @@ const faqItems = [
         <span>Openbird</span>
         <span class="title-tag">[BETA]</span>
       </h1>
-      <p>A local-first activity journal for your Mac — <a href={sourceUrl}>fully open-source</a></p>
+      <p>An experimental accessibility-first proof of concept for your Mac — <a href={sourceUrl}>fully open-source</a></p>
     </div>
 
     <p>
-      Openbird builds a private timeline of your day from the frontmost app, window title, browser URL
-      when available, and visible text in the active window.
+      Openbird extracts local context from the frontmost app, focused window, browser URL when
+      available, and visible accessibility text in the active window.
     </p>
 
     <p>
-      Everything stays on your Mac by default. You can inspect the log, pause capture, exclude apps
-      and domains, choose your own model, and delete data whenever you want.
+      It is intentionally narrow. Openbird is a proof of concept focused on the accessibility
+      pipeline only, not screenshots or broad device surveillance.
     </p>
 
     <p>
-      Want the full pipeline? Read <a href={howItWorksUrl}>how Openbird collects data, processes it,
-      and generates the daily summary</a>.
+      The goal is to learn what a trustworthy personal-context layer should look like before this
+      capability is integrated natively into fastrepl/char. Everything stays on your Mac by default,
+      and you can inspect the log, pause capture, exclude apps and domains, choose your own model,
+      and delete data whenever you want.
+    </p>
+
+    <p>
+      Want the current pipeline? Read <a href={howItWorksUrl}>how Openbird collects accessibility
+      data, processes it, and generates the daily summary</a>.
     </p>
 
     <p>
