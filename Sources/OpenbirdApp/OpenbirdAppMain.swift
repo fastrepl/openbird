@@ -101,78 +101,88 @@ private struct OpenbirdAppCommands: Commands {
 }
 
 private struct OpenbirdStatusMenu: View {
-    @ObservedObject var model: AppModel
+    let model: AppModel
     let appLifecycle: AppLifecycleController
     @Environment(\.openWindow) private var openWindow
+    @State private var state: AppModel.StatusMenuState
+
+    init(model: AppModel, appLifecycle: AppLifecycleController) {
+        self.model = model
+        self.appLifecycle = appLifecycle
+        _state = State(initialValue: model.statusMenuState())
+    }
 
     var body: some View {
-        Button("Open Openbird") {
-            openApp()
-        }
+        Group {
+            Button("Open Openbird") {
+                openApp()
+            }
 
-        Button("Settings") {
-            openSettings()
-        }
+            Button("Settings") {
+                openSettings()
+            }
 
-        Menu("Pause Context Collection") {
-            if model.isCapturePaused {
-                Button("Resume now") {
-                    model.resumeCapture()
+            Menu("Pause Context Collection") {
+                if state.isCapturePaused {
+                    Button("Resume now") {
+                        model.resumeCapture()
+                    }
+
+                    Divider()
+                }
+
+                Button("For 5 minutes") {
+                    model.pauseCapture(for: 5 * 60)
+                }
+
+                Button("For 15 minutes") {
+                    model.pauseCapture(for: 15 * 60)
+                }
+
+                Button("For 30 minutes") {
+                    model.pauseCapture(for: 30 * 60)
+                }
+
+                Button("For an hour") {
+                    model.pauseCapture(for: 60 * 60)
                 }
 
                 Divider()
+
+                Button("Until next launch") {
+                    model.pauseCaptureUntilNextLaunch()
+                }
             }
 
-            Button("For 5 minutes") {
-                model.pauseCapture(for: 5 * 60)
+            ExcludeStatusMenu(state: state.exclusionState) { kind, pattern in
+                model.addExclusion(kind: kind, pattern: pattern)
+            }
+            .equatable()
+
+            if let versionText = state.versionText {
+                Divider()
+
+                Button(versionText) {}
+                    .disabled(true)
             }
 
-            Button("For 15 minutes") {
-                model.pauseCapture(for: 15 * 60)
+            if let updateStatusText = state.updateStatusText {
+                Button(updateStatusText) {}
+                    .disabled(true)
             }
 
-            Button("For 30 minutes") {
-                model.pauseCapture(for: 30 * 60)
-            }
-
-            Button("For an hour") {
-                model.pauseCapture(for: 60 * 60)
+            Button("Check for Updates") {
+                model.checkForUpdates()
             }
 
             Divider()
 
-            Button("Until next launch") {
-                model.pauseCaptureUntilNextLaunch()
+            Button("Quit Openbird Completely") {
+                appLifecycle.quitCompletely()
             }
-        }
-
-        ExcludeStatusMenu(state: model.statusMenuExclusionState()) { kind, pattern in
-            model.addExclusion(kind: kind, pattern: pattern)
-        }
-        .equatable()
-
-        if let versionText = model.menuVersionText {
-            Divider()
-
-            Button(versionText) {}
-                .disabled(true)
-        }
-
-        if let updateStatusText = model.menuUpdateStatusText {
-            Button(updateStatusText) {}
-                .disabled(true)
-        }
-
-        Button("Check for Updates") {
-            model.checkForUpdates()
-        }
-
-        Divider()
-
-        Button("Quit Openbird Completely") {
-            appLifecycle.quitCompletely()
         }
         .onAppear {
+            state = model.statusMenuState()
             Task { await model.refreshCollectorState() }
         }
     }

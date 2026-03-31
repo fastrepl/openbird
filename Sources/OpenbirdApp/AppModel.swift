@@ -41,6 +41,13 @@ final class AppModel: ObservableObject {
         }
     }
 
+    struct StatusMenuState: Equatable {
+        let isCapturePaused: Bool
+        let exclusionState: StatusMenuExclusionState
+        let versionText: String?
+        let updateStatusText: String?
+    }
+
     private struct PendingAssistantReply {
         var message: ChatMessage
         var state: ChatDisplayMessage.State
@@ -674,6 +681,15 @@ final class AppModel: ObservableObject {
         return StatusMenuExclusionState(
             app: appAction,
             domain: domainAction
+        )
+    }
+
+    func statusMenuState() -> StatusMenuState {
+        StatusMenuState(
+            isCapturePaused: isCapturePaused,
+            exclusionState: statusMenuExclusionState(),
+            versionText: menuVersionText,
+            updateStatusText: menuUpdateStatusText
         )
     }
 
