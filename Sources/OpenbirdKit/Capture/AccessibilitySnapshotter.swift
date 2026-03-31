@@ -29,7 +29,10 @@ public struct AccessibilitySnapshotter: Sendable {
 
     public init() {}
 
-    func snapshotFrontmostWindow(for application: FrontmostApplicationContext) -> WindowSnapshot? {
+    func snapshotFrontmostWindow(
+        for application: FrontmostApplicationContext,
+        includeVisibleText: Bool = true
+    ) -> WindowSnapshot? {
         if shouldUseMinimalSnapshot(for: application) {
             let snapshot = snapshotSanitizer.sanitize(minimalSnapshot(for: application))
             return snapshotSanitizer.shouldDiscard(snapshot) ? nil : snapshot
@@ -50,11 +53,16 @@ public struct AccessibilitySnapshotter: Sendable {
         let windowTitle = stringAttribute(kAXTitleAttribute, on: focusedWindow)
             ?? application.appName
         let url = stringAttribute("AXURL", on: focusedWindow)
-        let windowText = collectVisibleText(from: focusedWindow, depth: 0, remainingNodes: 220, remainingCharacters: 4000)
-        let focusedElementText = copyElementAttribute(axApplication, attribute: kAXFocusedUIElementAttribute)
-            .map { collectVisibleText(from: $0, depth: 0, remainingNodes: 60, remainingCharacters: 1200) }
-            ?? ""
-        let visibleText = mergeTextFragments([windowText, focusedElementText])
+        let visibleText: String
+        if includeVisibleText {
+            let windowText = collectVisibleText(from: focusedWindow, depth: 0, remainingNodes: 220, remainingCharacters: 4000)
+            let focusedElementText = copyElementAttribute(axApplication, attribute: kAXFocusedUIElementAttribute)
+                .map { collectVisibleText(from: $0, depth: 0, remainingNodes: 60, remainingCharacters: 1200) }
+                ?? ""
+            visibleText = mergeTextFragments([windowText, focusedElementText])
+        } else {
+            visibleText = ""
+        }
 
         let snapshot = WindowSnapshot(
             bundleId: application.bundleID,

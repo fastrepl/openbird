@@ -165,7 +165,35 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
                 return
             }
 
+            let exclusions = try await store.loadExclusions()
+            if exclusionEngine.isExcluded(bundleID: frontmostApplication.bundleID, url: nil, rules: exclusions) {
+                clearCurrentCaptureState()
+                _ = try await persistCollectorStatus("running", heartbeat: now)
+                return
+            }
+
             guard shouldCapture else {
+                return
+            }
+
+            guard var snapshotPreview = snapshotter.snapshotFrontmostWindow(
+                for: frontmostApplication,
+                includeVisibleText: false
+            ) else {
+                _ = try await persistCollectorStatus("idle", heartbeat: now)
+                return
+            }
+
+            if snapshotPreview.url == nil {
+                snapshotPreview.url = browserURLResolver.currentURL(
+                    for: snapshotPreview.bundleId,
+                    windowTitle: snapshotPreview.windowTitle
+                )
+            }
+
+            if exclusionEngine.isExcluded(bundleID: snapshotPreview.bundleId, url: snapshotPreview.url, rules: exclusions) {
+                clearCurrentCaptureState()
+                _ = try await persistCollectorStatus("running", heartbeat: snapshotPreview.capturedAt)
                 return
             }
 
@@ -175,7 +203,7 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
             }
 
             if snapshot.url == nil {
-                snapshot.url = browserURLResolver.currentURL(
+                snapshot.url = snapshotPreview.url ?? browserURLResolver.currentURL(
                     for: snapshot.bundleId,
                     windowTitle: snapshot.windowTitle
                 )
@@ -185,19 +213,17 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
                 return
             }
 
-            let exclusions = try await store.loadExclusions()
-            let excluded = exclusionEngine.isExcluded(snapshot: snapshot, rules: exclusions)
             if currentFingerprint == snapshot.fingerprint, var currentEvent {
                 currentEvent.endedAt = snapshot.capturedAt
                 try await store.saveActivityEvent(currentEvent)
                 self.currentEvent = currentEvent
             } else {
-                let event = snapshot.asEvent(startedAt: snapshot.capturedAt, excluded: excluded)
+                let event = snapshot.asEvent(startedAt: snapshot.capturedAt, excluded: false)
                 try await store.saveActivityEvent(event)
                 currentEvent = event
                 currentFingerprint = snapshot.fingerprint
                 logger.debug(
-                    "Captured new activity bundleID=\(snapshot.bundleId, privacy: .public) excluded=\(excluded, privacy: .public)"
+                    "Captured new activity bundleID=\(snapshot.bundleId, privacy: .public)"
                 )
             }
 
@@ -220,6 +246,11 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
         Task { [weak self] in
             await self?.captureNow()
         }
+    }
+
+    private func clearCurrentCaptureState() {
+        currentEvent = nil
+        currentFingerprint = nil
     }
 
     private func persistCollectorStatus(_ status: String, heartbeat: Date) async throws -> Bool {

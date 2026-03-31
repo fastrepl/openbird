@@ -4,12 +4,16 @@ public struct ExclusionEngine {
     public init() {}
 
     public func isExcluded(snapshot: WindowSnapshot, rules: [ExclusionRule]) -> Bool {
-        let snapshotDomain = normalizedDomain(from: snapshot.url)
+        isExcluded(bundleID: snapshot.bundleId, url: snapshot.url, rules: rules)
+    }
+
+    public func isExcluded(bundleID: String, url: String?, rules: [ExclusionRule]) -> Bool {
+        let snapshotDomain = normalizedDomain(from: url)
 
         for rule in rules where rule.isEnabled {
             switch rule.kind {
             case .bundleID:
-                if snapshot.bundleId.caseInsensitiveCompare(rule.pattern) == .orderedSame {
+                if bundleID.caseInsensitiveCompare(rule.pattern) == .orderedSame {
                     return true
                 }
             case .domain:

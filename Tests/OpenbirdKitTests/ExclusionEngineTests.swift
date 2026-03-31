@@ -41,4 +41,16 @@ struct ExclusionEngineTests {
         #expect(engine.isExcluded(snapshot: matchingSnapshot, rules: rules))
         #expect(engine.isExcluded(snapshot: nonMatchingSnapshot, rules: rules) == false)
     }
+
+    @Test func matchesBundleAndDomainRulesWithoutSnapshotText() {
+        let engine = ExclusionEngine()
+        let rules = [
+            ExclusionRule(kind: .bundleID, pattern: "com.apple.MobileSMS"),
+            ExclusionRule(kind: .domain, pattern: "google.com"),
+        ]
+
+        #expect(engine.isExcluded(bundleID: "com.apple.MobileSMS", url: nil, rules: rules))
+        #expect(engine.isExcluded(bundleID: "com.apple.Safari", url: "https://docs.google.com/document/d/123", rules: rules))
+        #expect(engine.isExcluded(bundleID: "com.apple.Safari", url: "https://example.com", rules: rules) == false)
+    }
 }
