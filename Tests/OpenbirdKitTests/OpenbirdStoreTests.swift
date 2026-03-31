@@ -113,6 +113,152 @@ struct OpenbirdStoreTests {
         #expect(events.first?.source == "accessibility")
     }
 
+    @Test func partialDeleteRemovesOverlappingEventsAndDerivedArtifactsForAffectedDays() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-3600)
+        let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+        let previousDayString = OpenbirdDateFormatting.dayString(for: previousDay)
+        let currentDayString = OpenbirdDateFormatting.dayString(for: now)
+
+        let preservedEvent = ActivityEvent(
+            id: "event-keep",
+            startedAt: previousDay.addingTimeInterval(600),
+            endedAt: previousDay.addingTimeInterval(900),
+            bundleId: "com.apple.Safari",
+            appName: "Safari",
+            windowTitle: "Yesterday",
+            url: "https://example.com/yesterday",
+            visibleText: "Preserved event",
+            source: "accessibility",
+            contentHash: "event-keep",
+            isExcluded: false
+        )
+        let deletedEvent = ActivityEvent(
+            id: "event-delete",
+            startedAt: cutoff.addingTimeInterval(-600),
+            endedAt: cutoff.addingTimeInterval(300),
+            bundleId: "com.apple.Safari",
+            appName: "Safari",
+            windowTitle: "Today",
+            url: "https://example.com/today",
+            visibleText: "Deleted event",
+            source: "accessibility",
+            contentHash: "event-delete",
+            isExcluded: false
+        )
+
+        try await store.saveActivityEvent(preservedEvent)
+        try await store.saveActivityEvent(deletedEvent)
+        try await store.saveEmbeddingChunk(
+            id: "embed-keep",
+            eventID: preservedEvent.id,
+            providerID: "provider",
+            model: "embed-model",
+            vector: [1, 0],
+            snippet: "Preserved event"
+        )
+        try await store.saveEmbeddingChunk(
+            id: "embed-delete",
+            eventID: deletedEvent.id,
+            providerID: "provider",
+            model: "embed-model",
+            vector: [0, 1],
+            snippet: "Deleted event"
+        )
+        try await store.saveJournal(
+            DailyJournal(
+                day: previousDayString,
+                markdown: "Yesterday journal",
+                sections: [],
+                providerID: nil
+            )
+        )
+        try await store.saveJournal(
+            DailyJournal(
+                day: currentDayString,
+                markdown: "Today journal",
+                sections: [],
+                providerID: nil
+            )
+        )
+
+        let preservedThread = ChatThread(title: "Yesterday", startDay: previousDayString)
+        let deletedThread = ChatThread(title: "Today", startDay: currentDayString)
+        try await store.saveThread(preservedThread)
+        try await store.saveThread(deletedThread)
+        try await store.saveMessage(ChatMessage(threadID: preservedThread.id, role: .assistant, content: "Keep"))
+        try await store.saveMessage(ChatMessage(threadID: deletedThread.id, role: .assistant, content: "Delete"))
+
+        try await store.deleteEvents(since: cutoff)
+
+        let remainingEvents = try await store.loadActivityEvents(in: previousDay...now, includeExcluded: true)
+        let remainingEmbeddings = try await store.loadEmbeddingChunks(providerID: "provider", model: "embed-model")
+        let remainingThreads = try await store.loadThreads()
+
+        #expect(remainingEvents.map(\.id) == [preservedEvent.id])
+        #expect(remainingEmbeddings.map(\.eventID) == [preservedEvent.id])
+        #expect(try await store.loadJournal(for: previousDayString) != nil)
+        #expect(try await store.loadJournal(for: currentDayString) == nil)
+        #expect(remainingThreads.map(\.id) == [preservedThread.id])
+        #expect(try await store.loadMessages(threadID: preservedThread.id).count == 1)
+        #expect(try await store.loadMessages(threadID: deletedThread.id).isEmpty)
+    }
+
+    @Test func deleteAllRemovesChatHistoryAlongsideCapturedData() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let now = Date()
+        let day = OpenbirdDateFormatting.dayString(for: now)
+        let event = ActivityEvent(
+            id: "event-delete-all",
+            startedAt: now.addingTimeInterval(-60),
+            endedAt: now,
+            bundleId: "com.apple.Safari",
+            appName: "Safari",
+            windowTitle: "Delete all",
+            url: "https://example.com/delete-all",
+            visibleText: "Delete all content",
+            source: "accessibility",
+            contentHash: "event-delete-all",
+            isExcluded: false
+        )
+
+        try await store.saveActivityEvent(event)
+        try await store.saveEmbeddingChunk(
+            id: "embed-delete-all",
+            eventID: event.id,
+            providerID: "provider",
+            model: "embed-model",
+            vector: [1, 1],
+            snippet: "Delete all content"
+        )
+        try await store.saveJournal(
+            DailyJournal(
+                day: day,
+                markdown: "Delete all journal",
+                sections: [],
+                providerID: nil
+            )
+        )
+        let thread = ChatThread(title: "Delete all", startDay: day)
+        try await store.saveThread(thread)
+        try await store.saveMessage(ChatMessage(threadID: thread.id, role: .assistant, content: "Delete all chat"))
+
+        try await store.deleteAllEvents()
+
+        #expect(try await store.loadActivityEvents(in: Calendar.current.dayRange(for: now), includeExcluded: true).isEmpty)
+        #expect(try await store.loadEmbeddingChunks(providerID: "provider", model: "embed-model").isEmpty)
+        #expect(try await store.loadJournal(for: day) == nil)
+        #expect(try await store.loadThreads().isEmpty)
+        #expect(try await store.loadMessages(threadID: thread.id).isEmpty)
+    }
+
     @Test func preparedActivityEventsGroupNoisyAccessibilityLogs() async throws {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
         let store = try OpenbirdStore(databaseURL: databaseURL)

@@ -93,8 +93,8 @@ public actor OpenbirdStore {
     }
 
     public func deleteEvents(since date: Date) throws {
-        try database.deleteEvents(since: date)
         let affectedDays = dayStrings(in: date...Date())
+        try database.deleteEvents(since: date, affectedDays: affectedDays)
         try database.deletePreparedActivityEvents(for: affectedDays)
         invalidatePreparedActivityDays(for: affectedDays)
     }
@@ -102,6 +102,8 @@ public actor OpenbirdStore {
     public func deleteAllEvents() throws {
         try database.deleteAllEvents()
         try database.deleteAllPreparedActivityEvents()
+        pendingPreparedActivityDays.removeAll()
+        dirtyPreparedActivityDays.removeAll()
     }
 
     public func saveEmbeddingChunk(id: String, eventID: String, providerID: String, model: String, vector: [Double], snippet: String) throws {

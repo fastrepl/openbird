@@ -496,18 +496,45 @@ public final class SQLiteDatabase: @unchecked Sendable {
         }
     }
 
-    public func deleteEvents(since date: Date) throws {
-        let rows = try query("SELECT id FROM activity_events WHERE started_at >= ?;", bindings: [.double(date.timeIntervalSince1970)])
-        for row in rows {
-            try execute("DELETE FROM activity_events_fts WHERE id = ?;", bindings: [.text(row.stringValue(for: "id"))])
+    public func deleteEvents(since date: Date, affectedDays: Set<String>) throws {
+        let eventIDs = try query(
+            "SELECT id FROM activity_events WHERE ended_at >= ?;",
+            bindings: [.double(date.timeIntervalSince1970)]
+        ).map { $0.stringValue(for: "id") }
+
+        for eventID in eventIDs {
+            try execute("DELETE FROM activity_events_fts WHERE id = ?;", bindings: [.text(eventID)])
         }
-        try execute("DELETE FROM activity_events WHERE started_at >= ?;", bindings: [.double(date.timeIntervalSince1970)])
+        if eventIDs.isEmpty == false {
+            let eventPlaceholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ",")
+            try execute(
+                "DELETE FROM embedding_chunks WHERE event_id IN (\(eventPlaceholders));",
+                bindings: eventIDs.map(SQLiteValue.text)
+            )
+        }
+        try execute("DELETE FROM activity_events WHERE ended_at >= ?;", bindings: [.double(date.timeIntervalSince1970)])
+
+        guard affectedDays.isEmpty == false else {
+            return
+        }
+
+        let dayPlaceholders = Array(repeating: "?", count: affectedDays.count).joined(separator: ",")
+        let dayBindings = affectedDays.sorted().map(SQLiteValue.text)
+        try execute(
+            "DELETE FROM daily_journals WHERE day IN (\(dayPlaceholders));",
+            bindings: dayBindings
+        )
+        try execute(
+            "DELETE FROM chat_threads WHERE start_day IN (\(dayPlaceholders));",
+            bindings: dayBindings
+        )
     }
 
     public func deleteAllEvents() throws {
         try execute("DELETE FROM activity_events_fts;")
         try execute("DELETE FROM activity_events;")
         try execute("DELETE FROM daily_journals;")
+        try execute("DELETE FROM chat_threads;")
         try execute("DELETE FROM embedding_chunks;")
     }
 
