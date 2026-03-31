@@ -27,12 +27,12 @@ public actor JournalGenerator {
 
     public func generate(request: JournalGenerationRequest) async throws -> DailyJournal {
         let day = OpenbirdDateFormatting.dayString(for: request.date)
-        let groupedEvents = boundedSourceEvents(
-            from: try await store.preparedActivityEvents(for: request.date)
-                .filter { $0.isExcluded == false },
+        let groupedEvents = try await store.preparedActivityEvents(for: request.date)
+            .filter { $0.isExcluded == false }
+        let preparedSections = compactedSections(
+            from: groupedEvents,
             limit: request.maxSourceEvents
         )
-        let preparedSections = buildSections(from: groupedEvents)
         let sections = preparedSections.map(\.journalSection)
         let heuristicMarkdown = renderMarkdown(for: request.date, sections: preparedSections)
         logger.notice(
@@ -87,28 +87,21 @@ public actor JournalGenerator {
         return ProviderSelection.resolve(configs: configs, settings: settings, preferredID: id)
     }
 
-    private func boundedSourceEvents(
+    private func compactedSections(
         from events: [GroupedActivityEvent],
         limit: Int
-    ) -> [GroupedActivityEvent] {
+    ) -> [PreparedSection] {
         guard limit > 0 else {
             return []
         }
 
-        guard events.count > limit else {
-            return events
+        let sections = buildSections(from: events)
+        guard sections.count > limit else {
+            return sections
         }
 
-        guard limit > 1 else {
-            return Array(events.suffix(1))
-        }
-
-        let openingContextCount = max(1, limit / 4)
-        let recentActivityCount = limit - openingContextCount
-        let recentActivityStartIndex = max(openingContextCount, events.count - recentActivityCount)
-
-        return Array(events.prefix(openingContextCount))
-            + Array(events.suffix(from: recentActivityStartIndex))
+        return balancedSectionChunks(from: sections, chunkCount: limit)
+            .map(mergedSection)
     }
 
     private func buildSections(from events: [GroupedActivityEvent]) -> [PreparedSection] {
@@ -124,22 +117,43 @@ public actor JournalGenerator {
             }
         }
 
-        return groups.map { group in
-            let dominant = preferredHeading(in: group)
-            let bullets = group
-                .map(makeBullet(for:))
-                .filter { $0.isEmpty == false }
-                .deduplicatedByNormalizedText()
-                .prefix(4)
-            let start = OpenbirdDateFormatting.timeString(for: group.first?.startedAt ?? Date())
-            let end = OpenbirdDateFormatting.timeString(for: group.last?.endedAt ?? Date())
-            return PreparedSection(
-                heading: dominant,
-                timeRange: "\(start) - \(end)",
-                bullets: Array(bullets),
-                groupedEvents: group
-            )
+        return groups.map(preparedSection)
+    }
+
+    private func balancedSectionChunks(
+        from sections: [PreparedSection],
+        chunkCount: Int
+    ) -> [[PreparedSection]] {
+        let normalizedChunkCount = min(max(chunkCount, 1), sections.count)
+        return (0..<normalizedChunkCount).compactMap { index in
+            let start = sections.count * index / normalizedChunkCount
+            let end = sections.count * (index + 1) / normalizedChunkCount
+            guard start < end else {
+                return nil
+            }
+            return Array(sections[start..<end])
         }
+    }
+
+    private func mergedSection(_ sections: [PreparedSection]) -> PreparedSection {
+        preparedSection(from: sections.flatMap(\.groupedEvents))
+    }
+
+    private func preparedSection(from group: [GroupedActivityEvent]) -> PreparedSection {
+        let dominant = preferredHeading(in: group)
+        let bullets = group
+            .map(makeBullet(for:))
+            .filter { $0.isEmpty == false }
+            .deduplicatedByNormalizedText()
+            .prefix(4)
+        let start = OpenbirdDateFormatting.timeString(for: group.first?.startedAt ?? Date())
+        let end = OpenbirdDateFormatting.timeString(for: group.last?.endedAt ?? Date())
+        return PreparedSection(
+            heading: dominant,
+            timeRange: "\(start) - \(end)",
+            bullets: Array(bullets),
+            groupedEvents: group
+        )
     }
 
     private func makeBullet(for event: GroupedActivityEvent) -> String {
@@ -157,9 +171,6 @@ public actor JournalGenerator {
     }
 
     private func sectionPrompt(_ section: PreparedSection) -> String {
-        let evidence = section.groupedEvents
-            .map(eventPrompt)
-            .joined(separator: "\n")
         let appList = Array(section.groupedEvents.map(\.appName).deduplicatedByNormalizedText())
 
         return """
@@ -172,8 +183,22 @@ public actor JournalGenerator {
         - Do not use a bare tool, site, repo, or channel name as the heading when a task-level description is possible.
         - This chunk can be merged with adjacent chunks if they belong to the same broader activity.
         Evidence:
-        \(evidence.isEmpty ? "- No detailed evidence available." : evidence)
+        \(promptEvidence(for: section))
         """
+    }
+
+    private func promptEvidence(for section: PreparedSection) -> String {
+        guard section.groupedEvents.count > 6 else {
+            let evidence = section.groupedEvents.map(eventPrompt)
+            return evidence.isEmpty ? "- No detailed evidence available." : evidence.joined(separator: "\n")
+        }
+
+        var evidence = section.groupedEvents.prefix(2).map(eventPrompt)
+        evidence.append(contentsOf: section.bullets.map { "- Key cue | \($0)" })
+        evidence.append(contentsOf: section.groupedEvents.suffix(2).map(eventPrompt))
+        return evidence
+            .deduplicatedByNormalizedText()
+            .joined(separator: "\n")
     }
 
     private func journalPrompt(for date: Date, sections: [PreparedSection]) -> String {

@@ -370,7 +370,7 @@ struct JournalGeneratorTests {
         #expect(journal.markdown.contains("- See you there"))
     }
 
-    @Test func prioritizesRecentActivityWhenSourceEventsAreCapped() async throws {
+    @Test func compactsAcrossWholeDayWhenSourceEventsAreCapped() async throws {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
         let store = try OpenbirdStore(databaseURL: databaseURL)
         let generator = JournalGenerator(store: store)
@@ -404,7 +404,11 @@ struct JournalGeneratorTests {
             )
         )
 
-        let headings = journal.sections.map(\.heading)
-        #expect(headings == ["Window 1", "Window 4", "Window 5", "Window 6"])
+        let coveredSourceEventIDs = Set(journal.sections.flatMap(\.sourceEventIDs))
+
+        #expect(journal.sections.count == 4)
+        #expect(coveredSourceEventIDs == Set(events.map(\.id)))
+        #expect(journal.sections.first?.sourceEventIDs.contains(events[0].id) == true)
+        #expect(journal.sections.last?.sourceEventIDs.contains(events[5].id) == true)
     }
 }

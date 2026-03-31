@@ -17,10 +17,16 @@ public struct GoogleDocsCaptureHint: Equatable, Sendable {
 }
 
 public enum GoogleDocsCaptureAdvisor {
+    private static let recentEventWindow: TimeInterval = 90
+    private static let minimumWeakCaptureStreak: TimeInterval = 18
+    private static let maximumWeakCaptureGap: TimeInterval = 8
+
     public static func hint(for events: [ActivityEvent], now: Date = Date()) -> GoogleDocsCaptureHint? {
-        guard let event = mostRecentGoogleDocsEvent(in: events),
-              now.timeIntervalSince(event.endedAt) <= 90,
-              hasWeakCapture(event)
+        let recentEvents = recentGoogleDocsEvents(in: events, now: now)
+
+        guard let event = mostRecentGoogleDocsEvent(in: recentEvents),
+              hasWeakCapture(event),
+              weakCaptureStreakEnding(with: event, in: recentEvents) >= minimumWeakCaptureStreak
         else {
             return nil
         }
@@ -28,15 +34,51 @@ public enum GoogleDocsCaptureAdvisor {
         return GoogleDocsCaptureHint(eventID: event.id)
     }
 
+    private static func recentGoogleDocsEvents(in events: [ActivityEvent], now: Date) -> [ActivityEvent] {
+        events.filter { event in
+            isGoogleDocsDocumentEvent(event) && now.timeIntervalSince(event.endedAt) <= recentEventWindow
+        }
+    }
+
     private static func mostRecentGoogleDocsEvent(in events: [ActivityEvent]) -> ActivityEvent? {
         events
-            .filter(isGoogleDocsDocumentEvent)
             .max { lhs, rhs in
                 if lhs.endedAt != rhs.endedAt {
                     return lhs.endedAt < rhs.endedAt
                 }
                 return lhs.startedAt < rhs.startedAt
             }
+    }
+
+    private static func weakCaptureStreakEnding(
+        with latestEvent: ActivityEvent,
+        in events: [ActivityEvent]
+    ) -> TimeInterval {
+        let sortedEvents = events.sorted { lhs, rhs in
+            if lhs.endedAt != rhs.endedAt {
+                return lhs.endedAt < rhs.endedAt
+            }
+            return lhs.startedAt < rhs.startedAt
+        }
+
+        guard let latestIndex = sortedEvents.lastIndex(where: { $0.id == latestEvent.id }) else {
+            return latestEvent.endedAt.timeIntervalSince(latestEvent.startedAt)
+        }
+
+        var streakStart = latestEvent.startedAt
+        var previousStart = latestEvent.startedAt
+
+        for event in sortedEvents[..<latestIndex].reversed() {
+            let gap = previousStart.timeIntervalSince(event.endedAt)
+            guard gap <= maximumWeakCaptureGap, hasWeakCapture(event) else {
+                break
+            }
+
+            streakStart = min(streakStart, event.startedAt)
+            previousStart = event.startedAt
+        }
+
+        return latestEvent.endedAt.timeIntervalSince(streakStart)
     }
 
     private static func isGoogleDocsDocumentEvent(_ event: ActivityEvent) -> Bool {
