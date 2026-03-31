@@ -20,7 +20,7 @@ jobs:
     runs-on: macos-15
     permissions:
       contents: write
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       APP_NAME: Openbird.app
       BUNDLE_ID: com.computelesscomputer.openbird
