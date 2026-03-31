@@ -446,6 +446,7 @@ final class AppModel: ObservableObject {
 
             let dayRange = Calendar.current.dayRange(for: requestedDay)
             let day = OpenbirdDateFormatting.dayString(for: requestedDay)
+            await store.prepareRecentActivityEventsInBackground(dayCount: max(settings.retentionDays, 1))
             dayLoadStatus = Self.makeDayLoadStatus(
                 step: 2,
                 totalSteps: 5,

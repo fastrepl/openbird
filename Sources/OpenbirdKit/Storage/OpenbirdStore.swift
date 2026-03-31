@@ -52,7 +52,7 @@ public actor OpenbirdStore {
 
     public func saveActivityEvent(_ event: ActivityEvent) throws {
         let savedEvent = try database.saveActivityEvent(event)
-        schedulePreparedActivityRefresh(for: dayStringsCovered(by: savedEvent))
+        invalidatePreparedActivityDays(for: dayStringsCovered(by: savedEvent))
     }
 
     public func loadActivityEvents(in range: ClosedRange<Date>, includeExcluded: Bool = false) throws -> [ActivityEvent] {
@@ -96,7 +96,7 @@ public actor OpenbirdStore {
         try database.deleteEvents(since: date)
         let affectedDays = dayStrings(in: date...Date())
         try database.deletePreparedActivityEvents(for: affectedDays)
-        schedulePreparedActivityRefresh(for: affectedDays)
+        invalidatePreparedActivityDays(for: affectedDays)
     }
 
     public func deleteAllEvents() throws {
@@ -123,7 +123,11 @@ public actor OpenbirdStore {
     }
 
     public func prepareActivityEventsInBackground(for date: Date) {
-        schedulePreparedActivityRefresh(for: [OpenbirdDateFormatting.dayString(for: date)])
+        warmPreparedActivityDays(for: [OpenbirdDateFormatting.dayString(for: date)])
+    }
+
+    public func prepareRecentActivityEventsInBackground(endingAt date: Date = Date(), dayCount: Int) {
+        warmPreparedActivityDays(for: recentDayStrings(endingAt: date, dayCount: dayCount))
     }
 
     private func rebuildPreparedActivityEvents(for day: String, date: Date) async throws -> [GroupedActivityEvent] {
@@ -139,7 +143,7 @@ public actor OpenbirdStore {
         return groupedEvents
     }
 
-    private func schedulePreparedActivityRefresh<S: Sequence>(for days: S) where S.Element == String {
+    private func invalidatePreparedActivityDays<S: Sequence>(for days: S) where S.Element == String {
         let normalizedDays = Set(days).filter { $0.isEmpty == false }
         guard normalizedDays.isEmpty == false else {
             return
@@ -147,7 +151,31 @@ public actor OpenbirdStore {
 
         pendingPreparedActivityDays.formUnion(normalizedDays)
         dirtyPreparedActivityDays.formUnion(normalizedDays)
+        startPreparedActivityRefreshTaskIfNeeded()
+    }
 
+    private func warmPreparedActivityDays<S: Sequence>(for days: S) where S.Element == String {
+        let normalizedDays = Set(days).filter { $0.isEmpty == false }
+        guard normalizedDays.isEmpty == false else {
+            return
+        }
+
+        let daysNeedingRefresh = normalizedDays.filter { day in
+            if dirtyPreparedActivityDays.contains(day) {
+                return true
+            }
+            return (try? database.loadPreparedActivityEvents(for: day)) == nil
+        }
+
+        guard daysNeedingRefresh.isEmpty == false else {
+            return
+        }
+
+        pendingPreparedActivityDays.formUnion(daysNeedingRefresh)
+        startPreparedActivityRefreshTaskIfNeeded()
+    }
+
+    private func startPreparedActivityRefreshTaskIfNeeded() {
         guard preparedActivityRefreshTask == nil else {
             return
         }
@@ -188,12 +216,26 @@ public actor OpenbirdStore {
 
         preparedActivityRefreshTask = nil
         if pendingPreparedActivityDays.isEmpty == false {
-            schedulePreparedActivityRefresh(for: pendingPreparedActivityDays)
+            startPreparedActivityRefreshTaskIfNeeded()
         }
     }
 
     private func dayStringsCovered(by event: ActivityEvent) -> Set<String> {
         dayStrings(in: event.startedAt...event.endedAt)
+    }
+
+    private func recentDayStrings(endingAt date: Date, dayCount: Int) -> Set<String> {
+        guard dayCount > 0 else {
+            return []
+        }
+
+        let calendar = Calendar.current
+        let endOfWindow = calendar.startOfDay(for: date)
+        guard let startOfWindow = calendar.date(byAdding: .day, value: -(dayCount - 1), to: endOfWindow) else {
+            return [OpenbirdDateFormatting.dayString(for: endOfWindow)]
+        }
+
+        return dayStrings(in: startOfWindow...endOfWindow)
     }
 
     private func dayStrings(in range: ClosedRange<Date>) -> Set<String> {

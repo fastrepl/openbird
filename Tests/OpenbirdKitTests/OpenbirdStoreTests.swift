@@ -214,6 +214,71 @@ struct OpenbirdStoreTests {
         #expect(refreshed.first?.sourceEventCount == 2)
     }
 
+    @Test func backgroundPrepareKeepsFreshPreparedActivityCache() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let start = Date(timeIntervalSince1970: 1_720_000_000)
+        let day = OpenbirdDateFormatting.dayString(for: start)
+
+        try await store.saveActivityEvent(
+            ActivityEvent(
+                startedAt: start,
+                endedAt: start.addingTimeInterval(30),
+                bundleId: "com.apple.Safari",
+                appName: "Safari",
+                windowTitle: "Openbird",
+                url: "https://openbird.app",
+                visibleText: "Reviewed the Openbird homepage",
+                source: "accessibility",
+                contentHash: "safari-home",
+                isExcluded: false
+            )
+        )
+
+        try await Task.sleep(for: .milliseconds(650))
+        let initialUpdatedAt = try preparedActivityUpdatedAt(at: databaseURL, day: day)
+
+        #expect(initialUpdatedAt != nil)
+
+        await store.prepareActivityEventsInBackground(for: start)
+        try await Task.sleep(for: .milliseconds(650))
+
+        let refreshedUpdatedAt = try preparedActivityUpdatedAt(at: databaseURL, day: day)
+        #expect(refreshedUpdatedAt == initialUpdatedAt)
+    }
+
+    @Test func backgroundPrepareRecentDaysBackfillsMissingPreparedActivityCache() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let end = Date(timeIntervalSince1970: 1_720_086_400)
+        let previousDayEventStart = end.addingTimeInterval(-(24 * 3600))
+        let previousDay = OpenbirdDateFormatting.dayString(for: previousDayEventStart)
+
+        try await store.saveActivityEvent(
+            ActivityEvent(
+                startedAt: previousDayEventStart,
+                endedAt: previousDayEventStart.addingTimeInterval(45),
+                bundleId: "com.microsoft.VSCode",
+                appName: "VS Code",
+                windowTitle: "openbird",
+                url: nil,
+                visibleText: "Refined grouped activity cache invalidation",
+                source: "accessibility",
+                contentHash: "vscode-cache",
+                isExcluded: false
+            )
+        )
+
+        try await Task.sleep(for: .milliseconds(650))
+        try deleteAllPreparedActivityDays(at: databaseURL)
+        #expect(try preparedActivityUpdatedAt(at: databaseURL, day: previousDay) == nil)
+
+        await store.prepareRecentActivityEventsInBackground(endingAt: end, dayCount: 2)
+        try await Task.sleep(for: .milliseconds(650))
+
+        #expect(try preparedActivityUpdatedAt(at: databaseURL, day: previousDay) != nil)
+    }
+
     @Test func collectorLeaseBlocksSecondOwnerUntilHeartbeatExpires() async throws {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
         let store = try OpenbirdStore(databaseURL: databaseURL)
@@ -361,5 +426,32 @@ struct OpenbirdStoreTests {
 
         let reloaded = try await store.loadJournal(for: journal.day)
         #expect(reloaded?.markdown == "Summary")
+    }
+
+    private func preparedActivityUpdatedAt(at databaseURL: URL, day: String) throws -> TimeInterval? {
+        let database = try SQLiteDatabase(url: databaseURL)
+        let rows = try database.query(
+            "SELECT updated_at FROM prepared_activity_days WHERE day = ? LIMIT 1;",
+            bindings: [.text(day)]
+        )
+        guard let value = rows.first?["updated_at"] else {
+            return nil
+        }
+
+        switch value {
+        case .integer(let timestamp):
+            return TimeInterval(timestamp)
+        case .double(let timestamp):
+            return timestamp
+        case .text(let timestamp):
+            return TimeInterval(timestamp)
+        case .null:
+            return nil
+        }
+    }
+
+    private func deleteAllPreparedActivityDays(at databaseURL: URL) throws {
+        let database = try SQLiteDatabase(url: databaseURL)
+        try database.deleteAllPreparedActivityEvents()
     }
 }
