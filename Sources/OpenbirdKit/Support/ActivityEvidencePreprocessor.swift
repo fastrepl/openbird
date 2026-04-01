@@ -47,6 +47,7 @@ public struct GroupedActivityEvent: Identifiable, Codable, Hashable, Sendable {
 
 public enum ActivityEvidencePreprocessor {
     private static let maxMergeGap: TimeInterval = 5 * 60
+    private static let snapshotSanitizer = SnapshotSanitizer()
     private static let chromePhrases = [
         "enter a message",
         "voice call",
@@ -72,16 +73,10 @@ public enum ActivityEvidencePreprocessor {
                 continue
             }
 
-            let descriptors = descriptorComponents(for: event)
-            guard descriptors.isEmpty == false else {
+            guard let preparedEvent = preparedEvent(for: event) else {
                 continue
             }
-            preparedEvents.append(
-                PreparedEvent(
-                    event: event,
-                    descriptors: descriptors
-                )
-            )
+            preparedEvents.append(preparedEvent)
         }
 
         guard let firstEvent = preparedEvents.first else {
@@ -110,11 +105,15 @@ public enum ActivityEvidencePreprocessor {
             return false
         }
 
-        return descriptorComponents(for: event).isEmpty == false
+        return preparedEvent(for: event) != nil
     }
 
     public static func cleanedExcerpt(for event: ActivityEvent) -> String {
-        descriptorComponents(for: event).excerpt ?? ""
+        guard let preparedEvent = preparedEvent(for: event) else {
+            return ""
+        }
+
+        return preparedEvent.descriptors.excerpt ?? ""
     }
 
     public static func summarizedURL(from urlString: String?) -> String? {
@@ -139,15 +138,6 @@ public enum ActivityEvidencePreprocessor {
         }
 
         return summary.count > 80 ? String(summary.prefix(80)) + "…" : summary
-    }
-
-    private static func descriptorComponents(for events: [ActivityEvent]) -> DescriptorComponents {
-        var accumulator = DescriptorAccumulator()
-        for event in events {
-            accumulator.include(event)
-        }
-
-        return accumulator.components
     }
 
     private static func cleanedVisibleText(_ text: String, excluding values: [String]) -> String? {
@@ -210,14 +200,54 @@ public enum ActivityEvidencePreprocessor {
             .joined(separator: " ")
     }
 
-    private static func descriptorComponents(for event: ActivityEvent) -> DescriptorComponents {
+    private static func preparedEvent(for event: ActivityEvent) -> PreparedEvent? {
+        let snapshot = sanitizedSnapshot(for: event)
+        let descriptors = descriptorComponents(for: snapshot)
+        guard descriptors.isEmpty == false else {
+            return nil
+        }
+
+        return PreparedEvent(
+            event: event,
+            snapshot: snapshot,
+            contentHash: ActivityEventContentHash.make(
+                bundleId: snapshot.bundleId,
+                windowTitle: snapshot.windowTitle,
+                url: snapshot.url,
+                visibleText: snapshot.visibleText
+            ),
+            descriptors: descriptors
+        )
+    }
+
+    private static func sanitizedSnapshot(for event: ActivityEvent) -> WindowSnapshot {
+        let snapshot = WindowSnapshot(
+            capturedAt: event.endedAt,
+            bundleId: event.bundleId,
+            appName: event.appName,
+            windowTitle: event.windowTitle,
+            url: event.url,
+            visibleText: event.visibleText,
+            source: event.source
+        )
+
+        guard event.bundleId == "com.tinyspeck.slackmacgap" else {
+            return snapshot
+        }
+
+        return snapshotSanitizer.sanitize(snapshot)
+    }
+
+    private static func descriptorComponents(for snapshot: WindowSnapshot) -> DescriptorComponents {
         var accumulator = DescriptorAccumulator()
-        accumulator.include(event)
+        accumulator.include(snapshot: snapshot)
         return accumulator.components
     }
 
     private struct PreparedEvent {
         let event: ActivityEvent
+        let snapshot: WindowSnapshot
+        let contentHash: String
         let descriptors: DescriptorComponents
     }
 
@@ -237,12 +267,12 @@ public enum ActivityEvidencePreprocessor {
             let event = preparedEvent.event
             id = event.id
             bundleId = event.bundleId
-            appName = event.appName
+            appName = preparedEvent.snapshot.appName
             isExcluded = event.isExcluded
             startedAt = event.startedAt
             endedAt = event.endedAt
             sourceEventIDs = [event.id]
-            sourceEventHashes = [event.contentHash]
+            sourceEventHashes = [preparedEvent.contentHash]
             descriptors = preparedEvent.descriptors
         }
 
@@ -257,7 +287,7 @@ public enum ActivityEvidencePreprocessor {
                 return false
             }
 
-            if sourceEventHashes.contains(event.contentHash) {
+            if sourceEventHashes.contains(preparedEvent.contentHash) {
                 return true
             }
 
@@ -281,7 +311,7 @@ public enum ActivityEvidencePreprocessor {
             startedAt = min(startedAt, event.startedAt)
             endedAt = max(endedAt, event.endedAt)
             sourceEventIDs.append(event.id)
-            sourceEventHashes.insert(event.contentHash)
+            sourceEventHashes.insert(preparedEvent.contentHash)
 
             var mergedDescriptors = DescriptorAccumulator(components: descriptors)
             mergedDescriptors.include(preparedEvent.descriptors)
@@ -321,8 +351,13 @@ public enum ActivityEvidencePreprocessor {
             excerptPieces = components?.excerptPieces ?? []
         }
 
-        mutating func include(_ event: ActivityEvent) {
-            if let detailTitle = ActivityEvidencePreprocessor.cleanText(event.detailTitle) {
+        mutating func include(snapshot: WindowSnapshot) {
+            if let detailTitle = ActivityEvidencePreprocessor.cleanText(
+                ActivityEvidencePreprocessor.normalizedComparisonKey(for: snapshot.windowTitle)
+                    == ActivityEvidencePreprocessor.normalizedComparisonKey(for: snapshot.appName)
+                    ? nil
+                    : snapshot.windowTitle
+            ) {
                 let key = ActivityEvidencePreprocessor.normalizedComparisonKey(for: detailTitle)
                 if key.isEmpty == false {
                     detailTitles.insert(key)
@@ -332,7 +367,7 @@ public enum ActivityEvidencePreprocessor {
                 }
             }
 
-            if let rawURL = ActivityEvidencePreprocessor.cleanText(event.url),
+            if let rawURL = ActivityEvidencePreprocessor.cleanText(snapshot.url),
                let urlSummary = ActivityEvidencePreprocessor.summarizedURL(from: rawURL) {
                 let key = ActivityEvidencePreprocessor.normalizedComparisonKey(for: urlSummary)
                 if key.isEmpty == false {
@@ -344,8 +379,8 @@ public enum ActivityEvidencePreprocessor {
             }
 
             if let excerpt = ActivityEvidencePreprocessor.cleanedVisibleText(
-                event.visibleText,
-                excluding: [event.appName, event.windowTitle]
+                snapshot.visibleText,
+                excluding: [snapshot.appName, snapshot.windowTitle]
             ) {
                 let key = ActivityEvidencePreprocessor.normalizedComparisonKey(for: excerpt)
                 if key.isEmpty == false && excerpts.insert(key).inserted {

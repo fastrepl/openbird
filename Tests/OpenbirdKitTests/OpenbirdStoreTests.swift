@@ -113,6 +113,37 @@ struct OpenbirdStoreTests {
         #expect(events.first?.source == "accessibility")
     }
 
+    @Test func normalizesSlackEventsBeforeSaving() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
+        let store = try OpenbirdStore(databaseURL: databaseURL)
+        let now = Date()
+
+        try await store.saveActivityEvent(
+            ActivityEvent(
+                startedAt: now.addingTimeInterval(-30),
+                endedAt: now,
+                bundleId: "com.tinyspeck.slackmacgap",
+                appName: "Slack",
+                windowTitle: "* Peter Choi (DM) - Fastrepl - Slack",
+                url: nil,
+                visibleText: """
+                * Peter Choi (DM) - Fastrepl - Slack
+                Message to Peter Choi
+                """,
+                source: "accessibility",
+                contentHash: "slack-raw",
+                isExcluded: false
+            )
+        )
+
+        let events = try await store.loadActivityEvents(in: Calendar.current.dayRange(for: now))
+        let firstEvent = try #require(events.first)
+
+        #expect(events.count == 1)
+        #expect(firstEvent.windowTitle == "Peter Choi (DM)")
+        #expect(firstEvent.visibleText.isEmpty)
+    }
+
     @Test func partialDeleteRemovesOverlappingEventsAndDerivedArtifactsForAffectedDays() async throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

@@ -38,6 +38,7 @@ public final class SQLiteDatabase: @unchecked Sendable {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let lock = NSLock()
+    private let snapshotSanitizer = SnapshotSanitizer()
 
     public init(url: URL) throws {
         try OpenbirdPaths.ensureApplicationSupportDirectory()
@@ -823,19 +824,39 @@ public final class SQLiteDatabase: @unchecked Sendable {
     }
 
     private func normalizedActivityEvent(_ event: ActivityEvent) -> ActivityEvent {
-        let compactHash = ActivityEventContentHash.compactIfNeeded(
-            event.contentHash,
-            bundleId: event.bundleId,
-            windowTitle: event.windowTitle,
-            url: event.url,
-            visibleText: event.visibleText
-        )
-        guard compactHash != event.contentHash else {
-            return event
+        let sanitizedSnapshot: WindowSnapshot?
+        if event.bundleId == "com.tinyspeck.slackmacgap" {
+            sanitizedSnapshot = snapshotSanitizer.sanitize(
+                WindowSnapshot(
+                    capturedAt: event.endedAt,
+                    bundleId: event.bundleId,
+                    appName: event.appName,
+                    windowTitle: event.windowTitle,
+                    url: event.url,
+                    visibleText: event.visibleText,
+                    source: event.source
+                )
+            )
+        } else {
+            sanitizedSnapshot = nil
         }
 
         var normalized = event
-        normalized.contentHash = compactHash
+        normalized.windowTitle = sanitizedSnapshot?.windowTitle ?? event.windowTitle
+        normalized.url = sanitizedSnapshot?.url ?? event.url
+        normalized.visibleText = sanitizedSnapshot?.visibleText ?? event.visibleText
+        normalized.contentHash = ActivityEventContentHash.compactIfNeeded(
+            ActivityEventContentHash.make(
+                bundleId: event.bundleId,
+                windowTitle: normalized.windowTitle,
+                url: normalized.url,
+                visibleText: normalized.visibleText
+            ),
+            bundleId: event.bundleId,
+            windowTitle: normalized.windowTitle,
+            url: normalized.url,
+            visibleText: normalized.visibleText
+        )
         return normalized
     }
 

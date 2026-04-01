@@ -123,24 +123,30 @@ struct SnapshotSanitizer {
     }
 
     private func normalizedSlackTitle(_ title: String) -> String {
-        guard title.hasSuffix(" - Slack") else { return title }
+        let normalizedTitle = strippedSlackUnreadMarker(from: title)
+        guard normalizedTitle.hasSuffix(" - Slack") else { return normalizedTitle }
 
-        let withoutSuffix = String(title.dropLast(" - Slack".count))
+        let withoutSuffix = String(normalizedTitle.dropLast(" - Slack".count))
         var parts = withoutSuffix.components(separatedBy: " - ")
-        guard parts.count >= 2 else { return title }
+        guard parts.count >= 2 else { return withoutSuffix }
 
         if let last = parts.last, isSlackStatusSegment(last) {
             parts.removeLast()
         }
 
-        guard parts.count >= 2 else { return parts.first ?? withoutSuffix }
+        guard parts.count >= 2 else {
+            return strippedSlackUnreadMarker(from: parts.first ?? withoutSuffix)
+        }
 
         parts.removeLast()
-        let normalized = parts.joined(separator: " - ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = strippedSlackUnreadMarker(
+            from: parts.joined(separator: " - ")
+        )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.isEmpty == false {
             return normalized
         }
-        return withoutSuffix
+        return strippedSlackUnreadMarker(from: withoutSuffix)
     }
 
     private func isSlackStatusSegment(_ segment: String) -> Bool {
@@ -154,6 +160,14 @@ struct SnapshotSanitizer {
             || normalized.contains("mention")
             || normalized.contains("reply")
             || normalized.contains("thread")
+    }
+
+    private func strippedSlackUnreadMarker(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["* ", "• ", "● ", "◦ "] where trimmed.hasPrefix(prefix) {
+            return String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return trimmed
     }
 
     private func normalizedKakaoTalkTitle(_ title: String) -> String {
@@ -239,6 +253,13 @@ struct SnapshotSanitizer {
         }
 
         if bundleId == "com.tinyspeck.slackmacgap" && normalized == "slack" {
+            return true
+        }
+
+        if bundleId == "com.tinyspeck.slackmacgap",
+           (normalized.hasPrefix("message to ")
+            || normalized.hasPrefix("reply to thread in ")
+            || normalized.hasPrefix("send a message to ")) {
             return true
         }
 

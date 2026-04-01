@@ -36,6 +36,26 @@ struct SnapshotSanitizerTests {
         #expect(sanitized.visibleText.isEmpty)
     }
 
+    @Test func stripsSlackUnreadMarkersAndComposerPrompts() {
+        let sanitizer = SnapshotSanitizer()
+        let snapshot = WindowSnapshot(
+            bundleId: "com.tinyspeck.slackmacgap",
+            appName: "Slack",
+            windowTitle: "* Peter Choi (DM) - Fastrepl - Slack",
+            url: nil,
+            visibleText: """
+            * Peter Choi (DM) - Fastrepl - Slack
+            Message to Peter Choi
+            """,
+            source: "accessibility"
+        )
+
+        let sanitized = sanitizer.sanitize(snapshot)
+
+        #expect(sanitized.windowTitle == "Peter Choi (DM)")
+        #expect(sanitized.visibleText.isEmpty)
+    }
+
     @Test func removesGenericCodexVisibleText() {
         let sanitizer = SnapshotSanitizer()
         let snapshot = WindowSnapshot(
