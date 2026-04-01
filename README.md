@@ -125,6 +125,8 @@ Openbird has four main surfaces:
 - Chat: asks questions against your local activity log
 - Settings: provider setup, exclusions, retention, pause, and delete controls
 
+![Openbird Today view showing a generated daily review on macOS](./apps/landing/public/openbird-screenshot.png)
+
 ## Current State
 
 Openbird is early, but the core loop works:

@@ -83,6 +83,18 @@ const faqItems = [
 
     </p>
 
+    <figure class="product-shot">
+      <img
+        src="/openbird-screenshot.png"
+        alt="Openbird Today view showing a generated daily review timeline on macOS"
+        loading="eager"
+      />
+      <figcaption>
+        The Today view turns your local activity log into a grounded daily review you can inspect,
+        cite, and follow up on.
+      </figcaption>
+    </figure>
+
     <h2>At a glance</h2>
 
     <ul>
@@ -159,3 +171,29 @@ const faqItems = [
     void resolveLatestDownload();
   </script>
 </BaseLayout>
+
+<style>
+  .product-shot {
+    margin: 28px 0 32px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7f7f7 100%);
+    box-shadow:
+      0 18px 40px rgba(17, 17, 17, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .product-shot img {
+    width: 100%;
+    border: 1px solid #dddddd;
+    border-radius: 12px;
+  }
+
+  .product-shot figcaption {
+    margin-top: 12px;
+    margin-bottom: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+</style>
