@@ -183,7 +183,10 @@ private struct OpenbirdStatusMenu: View {
         }
         .onAppear {
             state = model.statusMenuState()
-            Task { await model.refreshCollectorState() }
+            Task {
+                await model.refreshCollectorState()
+                state = await model.loadStatusMenuState()
+            }
         }
     }
 

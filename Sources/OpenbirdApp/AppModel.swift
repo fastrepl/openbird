@@ -33,6 +33,8 @@ final class AppModel: ObservableObject {
             let pattern: String
         }
 
+        static let empty = Self(app: nil, domain: nil)
+
         let app: Action?
         let domain: Action?
 
@@ -722,21 +724,23 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func statusMenuExclusionState() -> StatusMenuExclusionState {
-        let context = currentActivityContextService.currentContext()
+    func loadStatusMenuState() async -> StatusMenuState {
+        let context = await currentActivityContextService.currentContext()
         let appAction = excludableAppAction(for: context)
         let domainAction = excludableDomainAction(for: context)
 
-        return StatusMenuExclusionState(
-            app: appAction,
-            domain: domainAction
+        return statusMenuState(
+            exclusionState: StatusMenuExclusionState(
+                app: appAction,
+                domain: domainAction
+            )
         )
     }
 
-    func statusMenuState() -> StatusMenuState {
+    func statusMenuState(exclusionState: StatusMenuExclusionState = .empty) -> StatusMenuState {
         StatusMenuState(
             isCapturePaused: isCapturePaused,
-            exclusionState: statusMenuExclusionState(),
+            exclusionState: exclusionState,
             versionText: menuVersionText,
             updateStatusText: menuUpdateStatusText
         )

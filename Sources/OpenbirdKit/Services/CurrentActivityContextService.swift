@@ -19,13 +19,17 @@ public struct CurrentActivityContextService: Sendable {
 
     public init() {}
 
-    @MainActor
-    public func currentContext() -> CurrentActivityContext? {
-        guard let application = FrontmostApplicationContext.current() else {
+    public func currentContext() async -> CurrentActivityContext? {
+        guard let application = await MainActor.run(body: { FrontmostApplicationContext.current() }) else {
             return nil
         }
 
-        var snapshot = snapshotter.snapshotFrontmostWindow(for: application)
+        var snapshot = await Task.detached(
+            priority: .utility,
+            operation: { @Sendable in
+                snapshotter.snapshotFrontmostWindow(for: application, includeVisibleText: false)
+            }
+        ).value
             ?? WindowSnapshot(
                 bundleId: application.bundleID,
                 appName: application.appName,
@@ -36,10 +40,17 @@ public struct CurrentActivityContextService: Sendable {
             )
 
         if snapshot.url == nil {
-            snapshot.url = browserURLResolver.currentURL(
-                for: snapshot.bundleId,
-                windowTitle: snapshot.windowTitle
-            )
+            let bundleID = snapshot.bundleId
+            let windowTitle = snapshot.windowTitle
+            snapshot.url = await Task.detached(
+                priority: .utility,
+                operation: { @Sendable in
+                    browserURLResolver.currentURL(
+                        for: bundleID,
+                        windowTitle: windowTitle
+                    )
+                }
+            ).value
         }
 
         return CurrentActivityContext(
