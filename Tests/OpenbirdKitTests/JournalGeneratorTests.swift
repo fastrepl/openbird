@@ -151,6 +151,38 @@ struct JournalGeneratorTests {
         #expect(bullets.count == 2)
     }
 
+    @Test func parsesOrderedListsIntoBlocks() throws {
+        let markdown = """
+        Based on the journal, here are the areas where you could have contributed more:
+
+        1. **Spent more time on growth.**
+        2. **Followed through on SEO research.**
+
+        ## Follow-up
+        1. Verify the shipped fix.
+        """
+
+        let document = JournalMarkdownParser.parse(markdown)
+
+        #expect(document.leadingBlocks.count == 2)
+
+        guard case .orderedList(let items) = document.leadingBlocks[1] else {
+            Issue.record("Expected ordered list in leading blocks")
+            return
+        }
+        #expect(items == [
+            "**Spent more time on growth.**",
+            "**Followed through on SEO research.**",
+        ])
+
+        let section = try #require(document.sections.first)
+        guard case .orderedList(let followUpItems) = section.blocks.first else {
+            Issue.record("Expected ordered list in follow-up section")
+            return
+        }
+        #expect(followUpItems == ["Verify the shipped fix."])
+    }
+
     @Test func ignoresLowSignalEventsInGeneratedReview() async throws {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
         let store = try OpenbirdStore(databaseURL: databaseURL)

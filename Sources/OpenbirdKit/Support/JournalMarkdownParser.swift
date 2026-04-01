@@ -42,6 +42,7 @@ public struct JournalMarkdownTable: Hashable, Sendable {
 public enum JournalMarkdownBlock: Hashable, Sendable {
     case paragraph(String)
     case bulletList([String])
+    case orderedList([String])
     case table(JournalMarkdownTable)
 }
 
@@ -110,6 +111,12 @@ public enum JournalMarkdownParser {
 
             if let (items, nextIndex) = parseBulletList(lines: lines, startIndex: index) {
                 appendBlock(.bulletList(items))
+                index = nextIndex
+                continue
+            }
+
+            if let (items, nextIndex) = parseOrderedList(lines: lines, startIndex: index) {
+                appendBlock(.orderedList(items))
                 index = nextIndex
                 continue
             }
@@ -253,6 +260,54 @@ public enum JournalMarkdownParser {
         }
     }
 
+    private static func parseOrderedList(
+        lines: [String],
+        startIndex: Int
+    ) -> ([String], Int)? {
+        guard orderedListText(from: lines[startIndex]) != nil else {
+            return nil
+        }
+
+        var items: [String] = []
+        var index = startIndex
+
+        while index < lines.count {
+            if let item = orderedListText(from: lines[index]) {
+                items.append(item)
+                index += 1
+                continue
+            }
+
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                index += 1
+            }
+            break
+        }
+
+        return (items, index)
+    }
+
+    private static func orderedListText(from line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let firstSpaceIndex = trimmed.firstIndex(of: " ") else {
+            return nil
+        }
+
+        let marker = trimmed[..<firstSpaceIndex]
+        guard marker.hasSuffix(".") else {
+            return nil
+        }
+
+        let numberPortion = marker.dropLast()
+        guard numberPortion.isEmpty == false && numberPortion.allSatisfy(\.isNumber) else {
+            return nil
+        }
+
+        let text = trimmed[firstSpaceIndex...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
     private static func parseParagraph(
         lines: [String],
         startIndex: Int
@@ -264,7 +319,10 @@ public enum JournalMarkdownParser {
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if trimmed.isEmpty || sectionHeading(from: trimmed) != nil || bulletText(from: line) != nil {
+            if trimmed.isEmpty ||
+                sectionHeading(from: trimmed) != nil ||
+                bulletText(from: line) != nil ||
+                orderedListText(from: line) != nil {
                 break
             }
 

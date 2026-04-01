@@ -167,9 +167,8 @@ private struct ChatMessageRow: View {
             if message.state == .thinking && message.content.isEmpty {
                 ThinkingStatusView()
             } else {
-                Text(message.content)
+                AssistantMarkdownMessage(markdown: message.content)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
             }
 
             if message.citations.isEmpty == false && message.content.isEmpty == false {
@@ -343,5 +342,41 @@ private struct EmptyChatState: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: contentWidth, alignment: .leading)
+    }
+}
+
+private struct AssistantMarkdownMessage: View {
+    let markdown: String
+
+    var body: some View {
+        let document = JournalMarkdownParser.parse(markdown)
+
+        return VStack(alignment: .leading, spacing: 16) {
+            if document.leadingBlocks.isEmpty == false {
+                MarkdownBlocksView(
+                    blocks: document.leadingBlocks,
+                    paragraphFont: .body,
+                    paragraphColor: .primary,
+                    listFont: .body,
+                    listColor: .primary
+                )
+            }
+
+            ForEach(document.sections) { section in
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(section.title)
+                        .font(.headline)
+
+                    MarkdownBlocksView(
+                        blocks: section.blocks,
+                        paragraphFont: .body,
+                        paragraphColor: .primary,
+                        listFont: .body,
+                        listColor: .primary
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

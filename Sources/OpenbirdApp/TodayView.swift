@@ -182,11 +182,13 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 0) {
                 if document.leadingBlocks.isEmpty == false {
-                    VStack(alignment: .leading, spacing: 14) {
-                        ForEach(Array(document.leadingBlocks.enumerated()), id: \.offset) { _, block in
-                            JournalMarkdownBlockView(block: block)
-                        }
-                    }
+                    MarkdownBlocksView(
+                        blocks: document.leadingBlocks,
+                        paragraphFont: .body,
+                        paragraphColor: .primary,
+                        listFont: .subheadline,
+                        listColor: .secondary
+                    )
                     .padding(24)
 
                     if document.sections.isEmpty == false {
@@ -202,9 +204,13 @@ struct TodayView: View {
                         Text(section.title)
                             .font(.headline)
 
-                        ForEach(Array(section.blocks.enumerated()), id: \.offset) { _, block in
-                            JournalMarkdownBlockView(block: block)
-                        }
+                        MarkdownBlocksView(
+                            blocks: section.blocks,
+                            paragraphFont: .body,
+                            paragraphColor: .primary,
+                            listFont: .subheadline,
+                            listColor: .secondary
+                        )
                     }
                     .padding(24)
                 }
@@ -226,12 +232,14 @@ struct TodayView: View {
     }
 
     private func timelineCard(items: [TimelineItem]) -> some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(items.indices, id: \.self) { index in
+        let insights = TimelineInsightBuilder.build(from: items)
+
+        return LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(insights.indices, id: \.self) { index in
                 if index > 0 {
                     Divider()
                 }
-                timelineRow(items[index])
+                timelineInsightRow(insights[index])
                     .padding(24)
             }
         }
@@ -239,22 +247,38 @@ struct TodayView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 24))
     }
 
-    private func timelineRow(_ item: TimelineItem) -> some View {
+    private func timelineInsightRow(_ insight: TimelineInsightGroup) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            ActivityAppIcon(
-                bundleId: item.bundleId,
-                bundlePath: item.bundlePath,
-                appName: item.appName,
-                size: 30
-            )
-            .padding(.top, 1)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(insightAccentColor(for: insight.kind).opacity(0.14))
+                .frame(width: 36, height: 36)
+                .overlay {
+                    Image(systemName: insight.kind.symbolName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(insightAccentColor(for: insight.kind))
+                }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(item.timeRange) — \(item.title)")
+                Text(insight.title)
                     .font(.headline)
 
-                ForEach(item.bullets, id: \.self) { bullet in
-                    Text("• \(bullet)")
+                Text(insight.metadata)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(insight.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+
+                if insight.apps.isEmpty == false {
+                    Text("Apps: \(insight.apps.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+
+                ForEach(insight.highlights, id: \.self) { highlight in
+                    Text("• \(highlight)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -263,6 +287,25 @@ struct TodayView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func insightAccentColor(for kind: TimelineInsightKind) -> Color {
+        switch kind {
+        case .communication:
+            return .blue
+        case .development:
+            return .orange
+        case .planning:
+            return .indigo
+        case .research:
+            return .mint
+        case .admin:
+            return .gray
+        case .media:
+            return .pink
+        case .generic:
+            return .accentColor
+        }
     }
 
     private var timelinePreparationKey: TimelinePreparationKey {
@@ -499,7 +542,8 @@ struct TodayView: View {
 
                 return TimelineItem(
                     id: event.id,
-                    timeRange: "\(OpenbirdDateFormatting.timeString(for: event.startedAt)) - \(OpenbirdDateFormatting.timeString(for: event.endedAt))",
+                    startedAt: event.startedAt,
+                    endedAt: event.endedAt,
                     title: event.displayTitle,
                     bullets: bulletCandidates,
                     sourceEventIDs: event.sourceEventIDs,
@@ -666,7 +710,7 @@ private enum TimelinePreparationStatus {
                 step: 4,
                 totalSteps: 4,
                 title: "Rendering the timeline",
-                detail: "Matching app metadata, icons, and summary sections before the timeline is shown."
+                detail: "Turning grouped activity into higher-level insight cards before the timeline is shown."
             )
         }
     }
@@ -731,117 +775,9 @@ private struct StreamingStatusText: View {
     }
 }
 
-private struct TimelineItem: Identifiable, Sendable {
-    let id: String
-    let timeRange: String
-    let title: String
-    let bullets: [String]
-    let sourceEventIDs: [String]
-    let bundleId: String?
-    let bundlePath: String?
-    let appName: String
-}
-
 private struct TimelinePreparationKey: Equatable {
     let journalID: String?
     let rawEventCount: Int
     let rawEventLastID: String?
     let installedApplicationCount: Int
-}
-
-private struct JournalMarkdownBlockView: View {
-    let block: JournalMarkdownBlock
-
-    var body: some View {
-        switch block {
-        case .paragraph(let text):
-            JournalMarkdownText(
-                markdown: text,
-                font: .body,
-                color: .primary
-            )
-        case .bulletList(let items):
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(items, id: \.self) { item in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("•")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        JournalMarkdownText(
-                            markdown: item,
-                            font: .subheadline,
-                            color: .secondary
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-        case .table(let table):
-            JournalMarkdownTableView(table: table)
-        }
-    }
-}
-
-private struct JournalMarkdownText: View {
-    let markdown: String
-    let font: Font
-    let color: Color
-
-    var body: some View {
-        Text(renderedText)
-            .font(font)
-            .foregroundStyle(color)
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var renderedText: AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace
-        )
-
-        if let attributed = try? AttributedString(markdown: markdown, options: options) {
-            return attributed
-        }
-
-        return AttributedString(markdown)
-    }
-}
-
-private struct JournalMarkdownTableView: View {
-    let table: JournalMarkdownTable
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            row(table.headers, isHeader: true)
-
-            ForEach(Array(table.rows.enumerated()), id: \.offset) { index, values in
-                Divider()
-                row(values, isHeader: false)
-                    .background(index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.03))
-            }
-        }
-        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.45))
-        }
-    }
-
-    private func row(_ values: [String], isHeader: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            ForEach(Array(values.enumerated()), id: \.offset) { _, value in
-                JournalMarkdownText(
-                    markdown: value,
-                    font: isHeader ? .subheadline.weight(.semibold) : .subheadline,
-                    color: isHeader ? .primary : .secondary
-                )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(isHeader ? Color.primary.opacity(0.04) : Color.clear)
-    }
 }
