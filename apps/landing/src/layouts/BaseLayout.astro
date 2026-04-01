@@ -21,6 +21,14 @@ const {
     <title>{title}</title>
   </head>
   <body>
+    <div class="site-banner-wrap">
+      <p class="site-banner">
+        Planned for Char:
+        Openbird is being developed for integration into
+        <a href="https://char.com">Char</a>
+        as a feature.
+      </p>
+    </div>
     <slot />
   </body>
 </html>
@@ -32,6 +40,9 @@ const {
     --muted: #505050;
     --line: #d4d4d4;
     --link: #165dff;
+    --banner-text: #5a2a00;
+    --banner-line: #f0c28d;
+    --banner-bg: #fff4e7;
     --code-text: #16314f;
     --code-line: #dbe4f0;
     --code-bg: #f5f8fc;
@@ -166,6 +177,21 @@ const {
     margin-left: 22px;
   }
 
+  .site-banner-wrap {
+    max-width: 700px;
+    margin: 0 16px 18px 22px;
+  }
+
+  .site-banner {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--banner-line);
+    border-radius: 10px;
+    background: var(--banner-bg);
+    color: var(--banner-text);
+    font-size: 0.92rem;
+  }
+
   .page > h2 {
     margin-top: 32px;
   }
@@ -235,5 +261,9 @@ const {
       margin-right: auto;
     }
 
+    .site-banner-wrap {
+      margin-left: 80px;
+      margin-right: auto;
+    }
   }
 </style>
