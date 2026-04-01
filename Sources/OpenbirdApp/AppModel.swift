@@ -81,6 +81,7 @@ final class AppModel: ObservableObject {
     @Published var isGeneratingTodayJournal = false
     @Published var isCheckingForUpdates = false
     @Published var isInstallingUpdate = false
+    @Published var isUpdateRestartPending = false
     @Published var isLoadingInstalledApplications = false
     @Published var isShowingRawLogInspector = false
     @Published private(set) var isSendingChat = false
@@ -320,22 +321,14 @@ final class AppModel: ObservableObject {
     }
 
     var menuUpdateStatusText: String? {
-        guard appVersion != nil else {
-            return nil
-        }
-        if isInstallingUpdate {
-            return "Installing update..."
-        }
-        if let update = availableUpdate {
-            return "Update available - \(update.version)"
-        }
-        if isCheckingForUpdates {
-            return "Checking for updates..."
-        }
-        if updateStatusMessage.isEmpty == false {
-            return updateStatusMessage
-        }
-        return "No new update"
+        Self.updateStatusText(
+            appVersionAvailable: appVersion != nil,
+            isInstallingUpdate: isInstallingUpdate,
+            isUpdateRestartPending: isUpdateRestartPending,
+            availableUpdateVersion: availableUpdate?.version,
+            isCheckingForUpdates: isCheckingForUpdates,
+            updateStatusMessage: updateStatusMessage
+        )
     }
 
     var availableChatModels: [ProviderModelInfo] {
@@ -451,6 +444,35 @@ final class AppModel: ObservableObject {
         return rawEvents.filter { event in
             event.isExcluded == false && compiledSourceEventIDs.contains(event.id) == false
         }
+    }
+
+    nonisolated static func updateStatusText(
+        appVersionAvailable: Bool,
+        isInstallingUpdate: Bool,
+        isUpdateRestartPending: Bool,
+        availableUpdateVersion: String?,
+        isCheckingForUpdates: Bool,
+        updateStatusMessage: String
+    ) -> String? {
+        guard appVersionAvailable || isUpdateRestartPending else {
+            return nil
+        }
+        if isUpdateRestartPending {
+            return "Restart Openbird to finish update"
+        }
+        if isInstallingUpdate {
+            return "Installing update..."
+        }
+        if let availableUpdateVersion {
+            return "Update available - \(availableUpdateVersion)"
+        }
+        if isCheckingForUpdates {
+            return "Checking for updates..."
+        }
+        if updateStatusMessage.isEmpty == false {
+            return updateStatusMessage
+        }
+        return "No new update"
     }
 
     func prepareForTermination() async {
@@ -656,6 +678,7 @@ final class AppModel: ObservableObject {
         }
 
         isInstallingUpdate = true
+        isUpdateRestartPending = false
         updateStatusMessage = "Installing Openbird \(availableUpdate.version)…"
         logger.notice("Installing Openbird update \(availableUpdate.version, privacy: .public)")
 
@@ -669,14 +692,26 @@ final class AppModel: ObservableObject {
                     update: availableUpdate,
                     appBundleURL: Bundle.main.bundleURL
                 )
+                isInstallingUpdate = false
+                isUpdateRestartPending = true
+                updateStatusMessage = "Restart Openbird to finish updating to \(availableUpdate.version)."
                 quitApplication()
             } catch {
                 logger.error("Failed to install Openbird update \(availableUpdate.version, privacy: .public): \(OpenbirdLog.errorDescription(error), privacy: .public)")
                 isInstallingUpdate = false
+                isUpdateRestartPending = false
                 updateStatusMessage = "Openbird \(availableUpdate.version) is available."
                 errorMessage = "Failed to update Openbird: \(error.localizedDescription)"
             }
         }
+    }
+
+    func restartToFinishUpdate() {
+        guard isUpdateRestartPending else {
+            return
+        }
+
+        quitApplication()
     }
 
     func refreshCollectorState() async {
@@ -1003,7 +1038,7 @@ final class AppModel: ObservableObject {
             }
             return
         }
-        guard isInstallingUpdate == false else {
+        guard isInstallingUpdate == false, isUpdateRestartPending == false else {
             return
         }
 

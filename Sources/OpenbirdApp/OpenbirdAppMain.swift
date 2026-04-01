@@ -171,6 +171,12 @@ private struct OpenbirdStatusMenu: View {
                     .disabled(true)
             }
 
+            if model.isUpdateRestartPending {
+                Button("Restart to Finish Update") {
+                    model.restartToFinishUpdate()
+                }
+            }
+
             Button("Check for Updates") {
                 model.checkForUpdates()
             }

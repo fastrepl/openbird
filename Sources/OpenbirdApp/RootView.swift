@@ -15,7 +15,7 @@ struct RootView: View {
             ToolbarItem(placement: .automatic) {
                 CaptureToolbarButton(model: model)
             }
-            if model.availableUpdate != nil {
+            if model.availableUpdate != nil || model.isUpdateRestartPending {
                 ToolbarItem(placement: .automatic) {
                     UpdateToolbarButton(model: model)
                 }
@@ -196,6 +196,9 @@ private struct UpdateToolbarButton: View {
     @State private var isHovering = false
 
     private var title: String {
+        if model.isUpdateRestartPending {
+            return "Restart to Update"
+        }
         if model.isInstallingUpdate {
             return "Updating…"
         }
@@ -206,6 +209,9 @@ private struct UpdateToolbarButton: View {
     }
 
     private var helpText: String {
+        if model.isUpdateRestartPending, let update = model.availableUpdate {
+            return "Restart Openbird to finish installing \(update.version)."
+        }
         if let update = model.availableUpdate {
             return "Install Openbird \(update.version)"
         }
@@ -216,7 +222,7 @@ private struct UpdateToolbarButton: View {
     }
 
     private var tintColor: Color {
-        model.availableUpdate == nil ? .secondary : .accentColor
+        (model.availableUpdate == nil && model.isUpdateRestartPending == false) ? .secondary : .accentColor
     }
 
     private var borderColor: Color {
@@ -234,6 +240,9 @@ private struct UpdateToolbarButton: View {
     }
 
     private var symbolName: String {
+        if model.isUpdateRestartPending {
+            return "arrow.clockwise"
+        }
         if model.availableUpdate != nil {
             return "arrow.down"
         }
@@ -242,7 +251,9 @@ private struct UpdateToolbarButton: View {
 
     var body: some View {
         Button {
-            if model.availableUpdate != nil {
+            if model.isUpdateRestartPending {
+                model.restartToFinishUpdate()
+            } else if model.availableUpdate != nil {
                 model.installAvailableUpdate()
             } else {
                 model.checkForUpdates()
@@ -251,7 +262,7 @@ private struct UpdateToolbarButton: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(tintColor.opacity(model.availableUpdate != nil ? 0.18 : 0.12))
+                        .fill(tintColor.opacity((model.availableUpdate != nil || model.isUpdateRestartPending) ? 0.18 : 0.12))
                     if model.isInstallingUpdate || model.isCheckingForUpdates {
                         ProgressView()
                             .controlSize(.small)
@@ -278,7 +289,7 @@ private struct UpdateToolbarButton: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(model.isInstallingUpdate || model.isCheckingForUpdates || (model.availableUpdate == nil && model.appVersion == nil))
+        .disabled(model.isInstallingUpdate || model.isCheckingForUpdates || (model.availableUpdate == nil && model.isUpdateRestartPending == false && model.appVersion == nil))
         .help(helpText)
         .onHover { hovering in
             isHovering = hovering

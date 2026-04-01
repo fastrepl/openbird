@@ -4,6 +4,32 @@ import Testing
 @testable import OpenbirdApp
 
 struct AppModelUpdateCheckTests {
+    @Test func showsRestartStatusAfterInstallerIsReady() {
+        #expect(
+            AppModel.updateStatusText(
+                appVersionAvailable: true,
+                isInstallingUpdate: false,
+                isUpdateRestartPending: true,
+                availableUpdateVersion: "0.2.0",
+                isCheckingForUpdates: false,
+                updateStatusMessage: "Restart Openbird to finish updating to 0.2.0."
+            ) == "Restart Openbird to finish update"
+        )
+    }
+
+    @Test func prefersInstallingStatusUntilRestartIsPending() {
+        #expect(
+            AppModel.updateStatusText(
+                appVersionAvailable: true,
+                isInstallingUpdate: true,
+                isUpdateRestartPending: false,
+                availableUpdateVersion: "0.2.0",
+                isCheckingForUpdates: false,
+                updateStatusMessage: "Installing Openbird 0.2.0…"
+            ) == "Installing update..."
+        )
+    }
+
     @Test func allowsAutomaticChecksWhenAppVersionExistsAndNoRecentCheckRan() {
         #expect(
             AppModel.shouldAutomaticallyCheckForUpdates(
