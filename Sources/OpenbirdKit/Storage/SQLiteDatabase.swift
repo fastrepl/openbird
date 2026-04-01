@@ -51,6 +51,7 @@ public final class SQLiteDatabase: @unchecked Sendable {
         try execute("PRAGMA journal_mode=WAL;")
         try execute("PRAGMA foreign_keys=ON;")
         try migrate()
+        try compactLegacyActivityEventContentHashes()
         try seedDefaultsIfNeeded()
     }
 
@@ -292,7 +293,8 @@ public final class SQLiteDatabase: @unchecked Sendable {
     }
 
     public func saveActivityEvent(_ event: ActivityEvent) throws -> ActivityEvent {
-        try withImmediateTransaction {
+        let normalizedEvent = normalizedActivityEvent(event)
+        return try withImmediateTransaction {
             let overlappingDuplicates = try query(
                 """
                 SELECT * FROM activity_events
@@ -303,14 +305,14 @@ public final class SQLiteDatabase: @unchecked Sendable {
                 ORDER BY started_at ASC, ended_at DESC;
                 """,
                 bindings: [
-                    .text(event.contentHash),
-                    .integer(event.isExcluded ? 1 : 0),
-                    .double(event.endedAt.timeIntervalSince1970),
-                    .double(event.startedAt.timeIntervalSince1970),
+                    .text(normalizedEvent.contentHash),
+                    .integer(normalizedEvent.isExcluded ? 1 : 0),
+                    .double(normalizedEvent.endedAt.timeIntervalSince1970),
+                    .double(normalizedEvent.startedAt.timeIntervalSince1970),
                 ]
             ).map(ActivityEvent.init(row:))
 
-            let mergedEvent = mergeActivityEvent(event, with: overlappingDuplicates)
+            let mergedEvent = mergeActivityEvent(normalizedEvent, with: overlappingDuplicates)
             for duplicate in overlappingDuplicates where duplicate.id != mergedEvent.id {
                 try execute("DELETE FROM activity_events_fts WHERE id = ?;", bindings: [.text(duplicate.id)])
                 try execute("DELETE FROM activity_events WHERE id = ?;", bindings: [.text(duplicate.id)])
@@ -723,6 +725,45 @@ public final class SQLiteDatabase: @unchecked Sendable {
         }
     }
 
+    private func compactLegacyActivityEventContentHashes(batchSize: Int = 500) throws {
+        while true {
+            let rows = try query(
+                """
+                SELECT id, bundle_id, window_title, url, visible_text
+                FROM activity_events
+                WHERE LENGTH(content_hash) > ?
+                LIMIT ?;
+                """,
+                bindings: [
+                    .integer(Int64(ActivityEventContentHash.oversizedLegacyThreshold)),
+                    .integer(Int64(batchSize)),
+                ]
+            )
+
+            guard rows.isEmpty == false else {
+                return
+            }
+
+            try withImmediateTransaction {
+                for row in rows {
+                    let compactHash = ActivityEventContentHash.make(
+                        bundleId: row.stringValue(for: "bundle_id"),
+                        windowTitle: row.stringValue(for: "window_title"),
+                        url: row.optionalStringValue(for: "url"),
+                        visibleText: row.stringValue(for: "visible_text")
+                    )
+                    try execute(
+                        "UPDATE activity_events SET content_hash = ? WHERE id = ?;",
+                        bindings: [
+                            .text(compactHash),
+                            .text(row.stringValue(for: "id")),
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
     private func seedDefaultsIfNeeded() throws {
         let countRows = try query("SELECT COUNT(*) AS value FROM provider_configs;")
         let count = countRows.first?.intValue(for: "value") ?? 0
@@ -779,6 +820,23 @@ public final class SQLiteDatabase: @unchecked Sendable {
     private func normalizeOptionalSetting(_ value: String?) -> String? {
         guard let value, value.isEmpty == false else { return nil }
         return value
+    }
+
+    private func normalizedActivityEvent(_ event: ActivityEvent) -> ActivityEvent {
+        let compactHash = ActivityEventContentHash.compactIfNeeded(
+            event.contentHash,
+            bundleId: event.bundleId,
+            windowTitle: event.windowTitle,
+            url: event.url,
+            visibleText: event.visibleText
+        )
+        guard compactHash != event.contentHash else {
+            return event
+        }
+
+        var normalized = event
+        normalized.contentHash = compactHash
+        return normalized
     }
 
     private func mergeActivityEvent(_ event: ActivityEvent, with duplicates: [ActivityEvent]) -> ActivityEvent {

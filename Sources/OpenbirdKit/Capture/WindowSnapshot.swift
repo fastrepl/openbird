@@ -28,9 +28,12 @@ public struct WindowSnapshot: Sendable {
     }
 
     public var fingerprint: String {
-        [bundleId, windowTitle, url ?? "", visibleText]
-            .joined(separator: "|")
-            .stableHash
+        ActivityEventContentHash.make(
+            bundleId: bundleId,
+            windowTitle: windowTitle,
+            url: url,
+            visibleText: visibleText
+        )
     }
 
     public func asEvent(startedAt: Date, excluded: Bool) -> ActivityEvent {
@@ -46,11 +49,5 @@ public struct WindowSnapshot: Sendable {
             contentHash: fingerprint,
             isExcluded: excluded
         )
-    }
-}
-
-private extension String {
-    var stableHash: String {
-        Data(utf8).base64EncodedString()
     }
 }

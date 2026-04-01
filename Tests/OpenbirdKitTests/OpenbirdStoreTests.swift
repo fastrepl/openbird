@@ -425,6 +425,62 @@ struct OpenbirdStoreTests {
         #expect(try preparedActivityUpdatedAt(at: databaseURL, day: previousDay) != nil)
     }
 
+    @Test func databaseCompactsOversizedLegacyContentHashesOnOpen() throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("sqlite")
+        let startedAt = Date(timeIntervalSince1970: 1_720_000_000)
+        let endedAt = startedAt.addingTimeInterval(45)
+        let bundleId = "com.apple.Safari"
+        let windowTitle = "Openbird"
+        let visibleText = String(repeating: "Reviewing large activity payloads. ", count: 80)
+        let legacyHash = Data([bundleId, windowTitle, "", visibleText].joined(separator: "|").utf8).base64EncodedString()
+
+        do {
+            let database = try SQLiteDatabase(url: databaseURL)
+            try database.execute(
+                """
+                INSERT INTO activity_events
+                (id, started_at, ended_at, bundle_id, app_name, window_title, url, visible_text, source, content_hash, is_excluded)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                bindings: [
+                    .text("legacy-event"),
+                    .double(startedAt.timeIntervalSince1970),
+                    .double(endedAt.timeIntervalSince1970),
+                    .text(bundleId),
+                    .text("Safari"),
+                    .text(windowTitle),
+                    .null,
+                    .text(visibleText),
+                    .text("accessibility"),
+                    .text(legacyHash),
+                    .integer(0),
+                ]
+            )
+        }
+
+        let reopenedDatabase = try SQLiteDatabase(url: databaseURL)
+        let compactedRows = try reopenedDatabase.query(
+            "SELECT content_hash FROM activity_events WHERE id = ?;",
+            bindings: [.text("legacy-event")]
+        )
+        let compactedHash: String?
+        if case .text(let value)? = compactedRows.first?["content_hash"] {
+            compactedHash = value
+        } else {
+            compactedHash = nil
+        }
+
+        #expect(compactedHash == ActivityEventContentHash.make(
+            bundleId: bundleId,
+            windowTitle: windowTitle,
+            url: nil,
+            visibleText: visibleText
+        ))
+        #expect(compactedHash?.count == ActivityEventContentHash.compactLength)
+    }
+
     @Test func collectorLeaseBlocksSecondOwnerUntilHeartbeatExpires() async throws {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("sqlite")
         let store = try OpenbirdStore(databaseURL: databaseURL)
