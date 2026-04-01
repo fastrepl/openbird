@@ -140,21 +140,6 @@ The current scope is intentionally narrow. Openbird is focused on being a trustw
 
 The longer-term direction is to bring this work into char.com without giving up the local-first and inspectable privacy model established here.
 
-## Development
-
-If you want to run from source:
-
-```bash
-swift build
-swift run OpenbirdApp
-```
-
-Run tests with:
-
-```bash
-swift test
-```
-
 ## Open Source
 
 Open source is not a branding choice here. It is part of the product.
