@@ -49,6 +49,24 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
         return Bundle.main.executableURL?.path ?? ProcessInfo.processInfo.processName
     }
 
+    nonisolated static func shouldSkipCapture(
+        for application: FrontmostApplicationContext,
+        currentProcessIdentifier: pid_t = ProcessInfo.processInfo.processIdentifier,
+        currentBundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> Bool {
+        if application.processIdentifier == currentProcessIdentifier {
+            return true
+        }
+
+        guard let currentBundleIdentifier = currentBundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+              currentBundleIdentifier.isEmpty == false
+        else {
+            return false
+        }
+
+        return currentBundleIdentifier.caseInsensitiveCompare(application.bundleID) == .orderedSame
+    }
+
     public func start() {
         lifecycleLock.lock()
         guard isStopped else {
@@ -162,6 +180,12 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
 
             guard let frontmostApplication = await MainActor.run(body: { FrontmostApplicationContext.current() }) else {
                 _ = try await persistCollectorStatus("idle", heartbeat: now)
+                return
+            }
+
+            if Self.shouldSkipCapture(for: frontmostApplication) {
+                clearCurrentCaptureState()
+                _ = try await persistCollectorStatus("running", heartbeat: now)
                 return
             }
 
