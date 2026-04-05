@@ -361,18 +361,18 @@ struct TodayView: View {
     }
 
     private var selectedDayTitle: String {
-        let day = Calendar.current.component(.day, from: model.selectedDay)
+        let day = Calendar.autoupdatingCurrent.component(.day, from: model.selectedDay)
         let month = Self.selectedDayMonthString(for: model.selectedDay)
         let year = Self.selectedDayYearString(for: model.selectedDay)
         return "\(month) \(day)\(ordinalSuffix(for: day)), \(year)"
     }
 
     private var isShowingToday: Bool {
-        Calendar.current.isDate(model.selectedDay, inSameDayAs: Date())
+        Calendar.autoupdatingCurrent.isDate(model.selectedDay, inSameDayAs: Date())
     }
 
     private func stepSelectedDay(by offset: Int) {
-        let calendar = Calendar.current
+        let calendar = Calendar.autoupdatingCurrent
         let currentDay = calendar.startOfDay(for: model.selectedDay)
         let today = calendar.startOfDay(for: Date())
 

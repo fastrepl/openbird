@@ -374,7 +374,7 @@ final class AppModel: ObservableObject {
     }
 
     var googleDocsCaptureHint: GoogleDocsCaptureHint? {
-        guard Calendar.current.isDateInToday(selectedDay) else {
+        guard Calendar.autoupdatingCurrent.isDateInToday(selectedDay) else {
             return nil
         }
 
@@ -424,7 +424,7 @@ final class AppModel: ObservableObject {
         from selectedDay: Date,
         previousCurrentDay: Date,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .autoupdatingCurrent
     ) -> Date? {
         let currentDay = calendar.startOfDay(for: now)
         guard calendar.isDate(currentDay, inSameDayAs: previousCurrentDay) == false else {
@@ -535,7 +535,7 @@ final class AppModel: ObservableObject {
                 availableProviderModels = []
             }
 
-            let dayRange = Calendar.current.dayRange(for: requestedDay)
+            let dayRange = Calendar.autoupdatingCurrent.dayRange(for: requestedDay)
             let day = OpenbirdDateFormatting.dayString(for: requestedDay)
             dayLoadStatus = Self.makeDayLoadStatus(
                 step: 2,
@@ -1300,7 +1300,7 @@ final class AppModel: ObservableObject {
     func sendChat() {
         let question = chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let thread = chatThread, question.isEmpty == false, isSendingChat == false else { return }
-        let requestedDayRange = Calendar.current.dayRange(for: selectedDay)
+        let requestedDayRange = Calendar.autoupdatingCurrent.dayRange(for: selectedDay)
 
         let userMessage = ChatMessage(threadID: thread.id, role: .user, content: question)
         let assistantPlaceholder = ChatMessage(threadID: thread.id, role: .assistant, content: "")
@@ -1348,7 +1348,7 @@ final class AppModel: ObservableObject {
 
     func selectDay(_ day: Date) {
         let normalizedDay = Self.startOfDay(for: day)
-        guard Calendar.current.isDate(selectedDay, inSameDayAs: normalizedDay) == false else {
+        guard Calendar.autoupdatingCurrent.isDate(selectedDay, inSameDayAs: normalizedDay) == false else {
             return
         }
 
@@ -1360,7 +1360,7 @@ final class AppModel: ObservableObject {
     }
 
     func handleCurrentDayChangeIfNeeded(now: Date = Date()) {
-        let calendar = Calendar.current
+        let calendar = Calendar.autoupdatingCurrent
         let currentDay = Self.startOfDay(for: now, calendar: calendar)
         guard calendar.isDate(currentDay, inSameDayAs: currentDayAnchor) == false else {
             return
@@ -1395,7 +1395,7 @@ final class AppModel: ObservableObject {
             return
         }
 
-        guard Calendar.current.isDate(selectedDay, inSameDayAs: now) else {
+        guard Calendar.autoupdatingCurrent.isDate(selectedDay, inSameDayAs: now) else {
             cancelAutomaticJournalGeneration()
             return
         }
@@ -1407,7 +1407,7 @@ final class AppModel: ObservableObject {
 
         let requestedDay = selectedDay
         let requestedDayString = OpenbirdDateFormatting.dayString(for: requestedDay)
-        let dayRange = Calendar.current.dayRange(for: requestedDay)
+        let dayRange = Calendar.autoupdatingCurrent.dayRange(for: requestedDay)
         lastAutomaticSelectedDayRefreshAt = now
 
         do {
@@ -1435,7 +1435,7 @@ final class AppModel: ObservableObject {
         guard isShuttingDown == false else {
             return
         }
-        guard Calendar.current.isDate(selectedDay, inSameDayAs: Date()) else {
+        guard Calendar.autoupdatingCurrent.isDate(selectedDay, inSameDayAs: Date()) else {
             cancelAutomaticJournalGeneration()
             return
         }
@@ -1472,8 +1472,8 @@ final class AppModel: ObservableObject {
         guard isShuttingDown == false else {
             return
         }
-        guard Calendar.current.isDate(selectedDay, inSameDayAs: requestedDay),
-              Calendar.current.isDate(requestedDay, inSameDayAs: Date()),
+        guard Calendar.autoupdatingCurrent.isDate(selectedDay, inSameDayAs: requestedDay),
+              Calendar.autoupdatingCurrent.isDate(requestedDay, inSameDayAs: Date()),
               let journal = todayJournal
         else {
             return
@@ -1496,7 +1496,7 @@ final class AppModel: ObservableObject {
         pendingAssistantReply = nil
     }
 
-    nonisolated private static func startOfDay(for date: Date, calendar: Calendar = .current) -> Date {
+    nonisolated private static func startOfDay(for date: Date, calendar: Calendar = .autoupdatingCurrent) -> Date {
         calendar.startOfDay(for: date)
     }
 

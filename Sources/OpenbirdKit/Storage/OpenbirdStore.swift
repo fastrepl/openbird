@@ -134,7 +134,7 @@ public actor OpenbirdStore {
 
     private func rebuildPreparedActivityEvents(for day: String, date: Date) async throws -> [GroupedActivityEvent] {
         let rawEvents = try database.loadActivityEvents(
-            in: Calendar.current.dayRange(for: date),
+            in: Calendar.autoupdatingCurrent.dayRange(for: date),
             includeExcluded: true
         )
         let groupedEvents = await Task.detached(priority: .utility) {
@@ -231,7 +231,7 @@ public actor OpenbirdStore {
             return []
         }
 
-        let calendar = Calendar.current
+        let calendar = Calendar.autoupdatingCurrent
         let endOfWindow = calendar.startOfDay(for: date)
         guard let startOfWindow = calendar.date(byAdding: .day, value: -(dayCount - 1), to: endOfWindow) else {
             return [OpenbirdDateFormatting.dayString(for: endOfWindow)]
@@ -242,7 +242,7 @@ public actor OpenbirdStore {
 
     private func dayStrings(in range: ClosedRange<Date>) -> Set<String> {
         var dayStrings: Set<String> = []
-        let calendar = Calendar.current
+        let calendar = Calendar.autoupdatingCurrent
         var current = calendar.startOfDay(for: range.lowerBound)
         let last = calendar.startOfDay(for: range.upperBound)
 

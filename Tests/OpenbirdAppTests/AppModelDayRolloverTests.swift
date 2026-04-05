@@ -52,6 +52,23 @@ struct AppModelDayRolloverTests {
         #expect(advancedDay == nil)
     }
 
+    @Test func advancesSelectedDayWhenTimezoneShiftMovesTodayForward() {
+        let losAngeles = makeCalendar(timeZoneID: "America/Los_Angeles")
+        let seoul = makeCalendar(timeZoneID: "Asia/Seoul")
+        let previousCurrentDay = makeDate(year: 2026, month: 4, day: 4, hour: 0, minute: 0, calendar: losAngeles)
+        let selectedDay = previousCurrentDay
+        let now = makeDate(year: 2026, month: 4, day: 5, hour: 9, minute: 0, calendar: seoul)
+
+        let advancedDay = AppModel.autoAdvancedSelectedDay(
+            from: selectedDay,
+            previousCurrentDay: previousCurrentDay,
+            now: now,
+            calendar: seoul
+        )
+
+        #expect(advancedDay == makeDate(year: 2026, month: 4, day: 5, hour: 0, minute: 0, calendar: seoul))
+    }
+
     @Test func returnsOnlyActivityEventsMissingFromJournalCoverage() {
         let calendar = makeCalendar()
         let start = makeDate(year: 2026, month: 3, day: 31, hour: 9, minute: 0, calendar: calendar)
@@ -162,9 +179,9 @@ struct AppModelDayRolloverTests {
         #expect(uncompiled.isEmpty)
     }
 
-    private func makeCalendar() -> Calendar {
+    private func makeCalendar(timeZoneID: String = "UTC") -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.timeZone = TimeZone(identifier: timeZoneID) ?? TimeZone(secondsFromGMT: 0)!
         return calendar
     }
 
