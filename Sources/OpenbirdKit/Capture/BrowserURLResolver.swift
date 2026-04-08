@@ -4,11 +4,30 @@ import Foundation
 public struct BrowserURLResolver: Sendable {
     private static let cacheLifetime: TimeInterval = 15
     private static let cache = URLResolutionCache()
+    private static let browserBundleIDs: Set<String> = [
+        "com.apple.Safari",
+        "com.google.Chrome",
+        "company.thebrowser.Browser",
+        "com.brave.Browser",
+        "com.microsoft.edgemac",
+    ]
+    private static let privateWindowTitleMarkers = [
+        "new incognito tab",
+        "private browsing",
+        "private window",
+    ]
+    private static let privateWindowTextMarkers = [
+        "browse inprivate",
+        "inprivate browsing",
+        "opened a private window",
+        "private browsing",
+        "you ve gone incognito",
+    ]
 
     public init() {}
 
     public func currentURL(for bundleID: String, windowTitle: String) -> String? {
-        guard isPrivateWindow(title: windowTitle) == false else { return nil }
+        guard isPrivateBrowsingActivity(bundleID: bundleID, windowTitle: windowTitle) == false else { return nil }
 
         let cacheKey = "\(bundleID)|\(windowTitle)"
         let now = Date()
@@ -40,9 +59,38 @@ public struct BrowserURLResolver: Sendable {
         return resolvedURL
     }
 
-    private func isPrivateWindow(title: String) -> Bool {
-        let lowered = title.lowercased()
-        return lowered.contains("private") || lowered.contains("incognito")
+    func isBrowser(bundleID: String) -> Bool {
+        Self.browserBundleIDs.contains(bundleID)
+    }
+
+    func isPrivateBrowsingActivity(
+        bundleID: String,
+        windowTitle: String,
+        visibleText: String = ""
+    ) -> Bool {
+        guard isBrowser(bundleID: bundleID) else {
+            return false
+        }
+
+        return hasPrivateWindowMarker(windowTitle, markers: Self.privateWindowTitleMarkers)
+            || hasPrivateWindowMarker(visibleText, markers: Self.privateWindowTextMarkers)
+    }
+
+    private func hasPrivateWindowMarker(_ value: String, markers: [String]) -> Bool {
+        let normalized = normalizedComparisonKey(for: value)
+        guard normalized.isEmpty == false else {
+            return false
+        }
+
+        return markers.contains(where: normalized.contains)
+    }
+
+    private func normalizedComparisonKey(for value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
     }
 
     private func runAppleScript(_ source: String) -> String? {

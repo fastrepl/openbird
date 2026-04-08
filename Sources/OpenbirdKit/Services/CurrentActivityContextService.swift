@@ -24,13 +24,33 @@ public struct CurrentActivityContextService: Sendable {
             return nil
         }
 
-        var snapshot = await Task.detached(
+        let shouldCollectVisibleText = browserURLResolver.isBrowser(bundleID: application.bundleID)
+        let capturedSnapshot = await Task.detached(
             priority: .utility,
             operation: { @Sendable in
-                snapshotter.snapshotFrontmostWindow(for: application, includeVisibleText: false)
+                snapshotter.snapshotFrontmostWindow(
+                    for: application,
+                    includeVisibleText: shouldCollectVisibleText
+                )
             }
         ).value
-            ?? WindowSnapshot(
+
+        if let capturedSnapshot,
+           browserURLResolver.isPrivateBrowsingActivity(
+               bundleID: capturedSnapshot.bundleId,
+               windowTitle: capturedSnapshot.windowTitle,
+               visibleText: capturedSnapshot.visibleText
+           ) {
+            return nil
+        }
+
+        var snapshot = capturedSnapshot
+        if snapshot == nil {
+            guard shouldCollectVisibleText == false else {
+                return nil
+            }
+
+            snapshot = WindowSnapshot(
                 bundleId: application.bundleID,
                 appName: application.appName,
                 windowTitle: application.appName,
@@ -38,6 +58,11 @@ public struct CurrentActivityContextService: Sendable {
                 visibleText: "",
                 source: "workspace"
             )
+        }
+
+        guard var snapshot else {
+            return nil
+        }
 
         if snapshot.url == nil {
             let bundleID = snapshot.bundleId

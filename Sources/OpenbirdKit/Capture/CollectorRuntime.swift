@@ -208,6 +208,16 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
                 return
             }
 
+            if browserURLResolver.isPrivateBrowsingActivity(
+                bundleID: snapshotPreview.bundleId,
+                windowTitle: snapshotPreview.windowTitle,
+                visibleText: snapshotPreview.visibleText
+            ) {
+                clearCurrentCaptureState()
+                _ = try await persistCollectorStatus("running", heartbeat: snapshotPreview.capturedAt)
+                return
+            }
+
             if snapshotPreview.url == nil {
                 snapshotPreview.url = browserURLResolver.currentURL(
                     for: snapshotPreview.bundleId,
@@ -223,6 +233,16 @@ public final class CollectorRuntime: NSObject, @unchecked Sendable {
 
             guard var snapshot = snapshotter.snapshotFrontmostWindow(for: frontmostApplication) else {
                 _ = try await persistCollectorStatus("idle", heartbeat: now)
+                return
+            }
+
+            if browserURLResolver.isPrivateBrowsingActivity(
+                bundleID: snapshot.bundleId,
+                windowTitle: snapshot.windowTitle,
+                visibleText: snapshot.visibleText
+            ) {
+                clearCurrentCaptureState()
+                _ = try await persistCollectorStatus("running", heartbeat: snapshot.capturedAt)
                 return
             }
 
