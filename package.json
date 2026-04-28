@@ -5,9 +5,5 @@
   "workspaces": [
     "apps/*"
   ],
-  "scripts": {
-    "landing:dev": "bun run --filter @openbird/landing dev",
-    "landing:build": "bun run --filter @openbird/landing build",
-    "landing:preview": "bun run --filter @openbird/landing preview"
-  }
+  "scripts": {}
 }
